@@ -1,0 +1,13 @@
+1、pointPublist.cpp中，这里反射率赋值改成了线数
+    p.intensity = cloudRGB->points[i].g;//r是反射率，g是线数线数
+2、imageProjection.cpp中，使用了线数
+3、launch文件里的camera_init_to_map，这个是不是也得看一下
+4、看能否看懂它的回环检测  看懂了。。。
+//2019/3/27
+5、更改CMakeLists，直接使用pcd2bag.cpp生成ponitPublish可执行文件，图省力了。。
+6、更改pcd2bag.cpp中，使用旋转矩阵将惯导位姿转换为激光位姿，不在惯导坐标系下计算了，这样更准确
+改了一个小时。。。
+把mapOptmization.cpp里的惯导位姿转换到Lidar那部分删除了
+2019/3/28
+1、查出了代码常常崩的问题所在，但是还没有找到解决办法，就是这句话的问题
+size_t latestFrameID = cloudKeyPoses3D->points.size() - 1;

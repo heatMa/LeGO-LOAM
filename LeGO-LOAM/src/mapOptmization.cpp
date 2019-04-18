@@ -44,7 +44,11 @@
 
 #include <gtsam/nonlinear/ISAM2.h>
 
+//新加的
+#include <gtsam/navigation/GPSFactor.h>
+
 using namespace gtsam;
+
 
 class mapOptimization{
 
@@ -70,11 +74,15 @@ private:
     ros::Publisher pubIcpKeyFrames;
     ros::Publisher pubRecentKeyFrames;
 
+    ros::Publisher pubGPS;
+
     ros::Subscriber subLaserCloudCornerLast;
     ros::Subscriber subLaserCloudSurfLast;
     ros::Subscriber subOutlierCloudLast;
     ros::Subscriber subLaserOdometry;
     ros::Subscriber subImu;
+    //新加的
+    ros::Subscriber subGPS;
 
     nav_msgs::Odometry odomAftMapped;
     tf::StampedTransform aftMappedTrans;
@@ -183,6 +191,8 @@ private:
     double imuTime[imuQueLength];
     float imuRoll[imuQueLength];
     float imuPitch[imuQueLength];
+    
+    double gpsValue[9];
 
     std::mutex mtx;
 
@@ -239,10 +249,13 @@ public:
         subOutlierCloudLast = nh.subscribe<sensor_msgs::PointCloud2>("/outlier_cloud_last", 2, &mapOptimization::laserCloudOutlierLastHandler, this);
         subLaserOdometry = nh.subscribe<nav_msgs::Odometry>("/laser_odom_to_init", 5, &mapOptimization::laserOdometryHandler, this);
         subImu = nh.subscribe<sensor_msgs::Imu> (imuTopic, 50, &mapOptimization::imuHandler, this);
+        subGPS = nh.subscribe<sensor_msgs::Imu> ("/imu/gps", 50, &mapOptimization::gpsHandler, this);
 
         pubHistoryKeyFrames = nh.advertise<sensor_msgs::PointCloud2>("/history_cloud", 2);
         pubIcpKeyFrames = nh.advertise<sensor_msgs::PointCloud2>("/corrected_cloud", 2);
         pubRecentKeyFrames = nh.advertise<sensor_msgs::PointCloud2>("/recent_cloud", 2);
+
+        pubGPS=nh.advertise<nav_msgs::Odometry>("/gps",5,false);
 
         downSizeFilterCorner.setLeafSize(0.2, 0.2, 0.2);
         downSizeFilterSurf.setLeafSize(0.4, 0.4, 0.4);
@@ -369,6 +382,9 @@ public:
         aLoopIsClosed = false;
 
         latestFrameID = 0;
+
+        for(int i=0;i<9;i++)
+            gpsValue[i]=0;
     }
 
     void transformAssociateToMap()
@@ -634,6 +650,7 @@ public:
         transformSum[3] = laserOdometry->pose.pose.position.x;
         transformSum[4] = laserOdometry->pose.pose.position.y;
         transformSum[5] = laserOdometry->pose.pose.position.z;
+        //std::cout<<"laserOdo: "<<transformSum[3]<<" "<<transformSum[4]<<" "<<transformSum[5]<<std::endl;
         newLaserOdometry = true;
     }
 
@@ -646,6 +663,48 @@ public:
         imuTime[imuPointerLast] = imuIn->header.stamp.toSec();
         imuRoll[imuPointerLast] = roll;
         imuPitch[imuPointerLast] = pitch;
+    }
+
+    //这里gpsIn里的协方差存储的GPS值
+    void gpsHandler(const sensor_msgs::Imu::ConstPtr& gpsIn){
+        
+        for(int i=0;i<9;i++)
+            gpsValue[i]=gpsIn->orientation_covariance[i];
+        publish_gpsValue(gpsIn);
+    }
+
+void publish_gpsValue(const sensor_msgs::ImuConstPtr& imu_msg) {
+        //转换为ROS Odometry格式数据发布出来
+        nav_msgs::Odometry odom;
+        odom.header.stamp = imu_msg->header.stamp;
+        odom.header.frame_id = "/camera";
+        odom.child_frame_id = "gps";
+
+        //利用eigen从矩阵获得四元数
+        Eigen::Quaternionf quat;
+        //std::cout<<"tempVel[5]: "<<tempVel[5]<<std::endl;   //Eigen这个数组越界没有内存警告牛逼了onf quat;
+        quat = Eigen::AngleAxisf(imu_msg->orientation_covariance[6], Eigen::Vector3f::UnitX())
+                * Eigen::AngleAxisf(imu_msg->orientation_covariance[7], Eigen::Vector3f::UnitY())
+                * Eigen::AngleAxisf(imu_msg->orientation_covariance[8], Eigen::Vector3f::UnitZ());
+        quat.normalize();
+        //转换为ROS下的四元数
+        geometry_msgs::Quaternion odom_quat;
+        odom_quat.w = quat.w();
+        odom_quat.x = quat.x();
+        odom_quat.y = quat.y();
+        odom_quat.z = quat.z();
+
+        odom.pose.pose.position.x = imu_msg->orientation_covariance[1];
+        odom.pose.pose.position.y = imu_msg->orientation_covariance[2];
+        odom.pose.pose.position.z = imu_msg->orientation_covariance[0];
+        //std::cout<<imu_msg->orientation_covariance[0]<<" "<<imu_msg->orientation_covariance[1]<<" "<<imu_msg->orientation_covariance[2]<<std::endl;;
+        odom.pose.pose.orientation = odom_quat;
+        odom.twist.twist.linear.x = imu_msg->orientation_covariance[3];
+        odom.twist.twist.linear.y = imu_msg->orientation_covariance[4];
+        odom.twist.twist.linear.z = imu_msg->orientation_covariance[5];
+
+        pubGPS.publish(odom);
+
     }
 
     void publishTF(){
@@ -739,7 +798,7 @@ public:
         cloudMsgTemp.header.stamp = ros::Time().fromSec(timeLaserOdometry);
         cloudMsgTemp.header.frame_id = "/camera_init";
         pubLaserCloudSurround.publish(cloudMsgTemp);  
-
+        std::cout<<"laser_surround_points size: "<<globalMapKeyFramesDS->points.size()<<endl;
         globalMapKeyPoses->clear();
         globalMapKeyPosesDS->clear();
         globalMapKeyFrames->clear();
@@ -833,7 +892,7 @@ public:
             if (potentialLoopFlag == false)
                 return;
         }
-
+        std::cout<<"进入回环检测"<<endl;
         potentialLoopFlag = false;
 
         pcl::IterativeClosestPoint<PointType, PointType> icp;
@@ -1449,6 +1508,48 @@ public:
             }
         }
     }
+//    using symbol_shorthand::X; // Pose3 (x,y,z,r,p,y)
+//    using symbol_shorthand::V; // Vel   (xdot,ydot,zdot)
+//    using symbol_shorthand::B; // Bias  (ax,ay,az,gx,gy,gz)
+    void performGPSCorrect()
+    {
+       
+        gtsam::Vector3 pos;
+        gtsam::Vector3 angle;
+        //pos<<gpsValue[0]+L*cos(theta)-L,gpsValue[1]+L*sin(theta),gpsValue[2]+H;
+        //现在获得的直接是Lidar的位姿了
+        pos<<gpsValue[0],gpsValue[1],gpsValue[2];
+        angle<<0,0,0;
+
+        //位置噪声
+        gtsam::Vector3 noise;
+        noise<<1,1,1;
+        noiseModel::Diagonal::shared_ptr correction_noise=noiseModel::Diagonal::Sigmas(noise);
+        
+        size_t latestFrameID = cloudKeyPoses3D->points.size() - 1;
+        std::cout<<"latestFrameID: "<<latestFrameID<<std::endl;
+        //添加GPS的不确定性
+        GPSFactor gps_factor(latestFrameID,Point3(pos(0),pos(1),pos(2)),correction_noise);
+        std::cout<<"GPS     : "<<pos(0)<<" "<<pos(1)<<" "<<pos(2)<<std::endl;
+        std::cout<<"AftOdo:   "<<transformAftMapped[5]<<" "<<transformAftMapped[3]<<" "<<transformAftMapped[4]<<std::endl;
+
+        std::lock_guard<std::mutex> lock(mtx);
+        gtSAMgraph.add(gps_factor);
+        isam->update(gtSAMgraph);
+        isam->update();
+        gtSAMgraph.resize(0);
+
+    }
+
+    void gpsCorrectThread()
+    {
+
+        ros::Rate rate(1);
+        while (ros::ok()){
+            rate.sleep();
+            performGPSCorrect();
+        }
+    }
 };
 
 
@@ -1462,6 +1563,7 @@ int main(int argc, char** argv)
 
     std::thread loopthread(&mapOptimization::loopClosureThread, &MO);
     std::thread visualizeMapThread(&mapOptimization::visualizeGlobalMapThread, &MO);
+    std::thread gpsthread(&mapOptimization::gpsCorrectThread,&MO);
 
     ros::Rate rate(200);
     while (ros::ok())
@@ -1475,6 +1577,7 @@ int main(int argc, char** argv)
 
     loopthread.join();
     visualizeMapThread.join();
+    gpsthread.join();
 
     return 0;
 }

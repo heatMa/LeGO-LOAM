@@ -415,38 +415,76 @@ public:
         }
     }
 
-    void imuHandler(const sensor_msgs::Imu::ConstPtr& imuIn)
-    {
-        double roll, pitch, yaw;
-        tf::Quaternion orientation;
-        tf::quaternionMsgToTF(imuIn->orientation, orientation);
-        tf::Matrix3x3(orientation).getRPY(roll, pitch, yaw);
+//    void imuHandler(const sensor_msgs::Imu::ConstPtr& imuIn)
+//    {
+//        double roll, pitch, yaw;
+//        tf::Quaternion orientation;
+//        tf::quaternionMsgToTF(imuIn->orientation, orientation);
+//        tf::Matrix3x3(orientation).getRPY(roll, pitch, yaw);
 
-        float accX = imuIn->linear_acceleration.y - sin(roll) * cos(pitch) * 9.81;
-        float accY = imuIn->linear_acceleration.z - cos(roll) * cos(pitch) * 9.81;
-        float accZ = imuIn->linear_acceleration.x + sin(pitch) * 9.81;
+////        float accX = imuIn->linear_acceleration.y - sin(roll) * cos(pitch) * 9.81;
+////        float accY = imuIn->linear_acceleration.z - cos(roll) * cos(pitch) * 9.81;
+////        float accZ = imuIn->linear_acceleration.x + sin(pitch) * 9.81;
 
-        imuPointerLast = (imuPointerLast + 1) % imuQueLength;
+//        float accX = imuIn->linear_acceleration.y;
+//        float accY = imuIn->linear_acceleration.z;
+//        float accZ = imuIn->linear_acceleration.x;
 
-        imuTime[imuPointerLast] = imuIn->header.stamp.toSec();
+//        imuPointerLast = (imuPointerLast + 1) % imuQueLength;
 
-        imuRoll[imuPointerLast] = roll;
-        imuPitch[imuPointerLast] = pitch;
-        imuYaw[imuPointerLast] = yaw;
+//        imuTime[imuPointerLast] = imuIn->header.stamp.toSec();
 
-        imuAccX[imuPointerLast] = accX;
-        imuAccY[imuPointerLast] = accY;
-        imuAccZ[imuPointerLast] = accZ;
+//        imuRoll[imuPointerLast] = roll;
+//        imuPitch[imuPointerLast] = pitch;
+//        imuYaw[imuPointerLast] = yaw;
 
-        imuAngularVeloX[imuPointerLast] = imuIn->angular_velocity.x;
-        imuAngularVeloY[imuPointerLast] = imuIn->angular_velocity.y;
-        imuAngularVeloZ[imuPointerLast] = imuIn->angular_velocity.z;
+//        imuAccX[imuPointerLast] = accX;
+//        imuAccY[imuPointerLast] = accY;
+//        imuAccZ[imuPointerLast] = accZ;
 
-        AccumulateIMUShiftAndRotation();
-    }
+//        imuAngularVeloX[imuPointerLast] = imuIn->angular_velocity.x;
+//        imuAngularVeloY[imuPointerLast] = imuIn->angular_velocity.y;
+//        imuAngularVeloZ[imuPointerLast] = imuIn->angular_velocity.z;
+
+//        AccumulateIMUShiftAndRotation();
+//    }
+
+
+
+
+        void imuHandler(const sensor_msgs::Imu::ConstPtr& imuIn)
+        {
+            double roll, pitch, yaw;
+            tf::Quaternion orientation;
+            tf::quaternionMsgToTF(imuIn->orientation, orientation);
+            tf::Matrix3x3(orientation).getRPY(roll, pitch, yaw);
+
+            imuPointerLast = (imuPointerLast + 1) % imuQueLength;
+
+            imuTime[imuPointerLast] = imuIn->header.stamp.toSec();
+
+            imuRoll[imuPointerLast] = roll;
+            imuPitch[imuPointerLast] = pitch;
+            imuYaw[imuPointerLast] = yaw;
+
+            imuShiftX[imuPointerLast] = imuIn->linear_acceleration.y;
+            imuShiftY[imuPointerLast] = imuIn->linear_acceleration.z;
+            imuShiftZ[imuPointerLast] = imuIn->linear_acceleration.x;
+
+            imuVeloX[imuPointerLast] = imuIn->angular_velocity.x;
+            imuVeloY[imuPointerLast] = imuIn->angular_velocity.y;
+            imuVeloZ[imuPointerLast] = imuIn->angular_velocity.z;
+
+            imuAngularRotationX[imuPointerLast] = roll;
+            imuAngularRotationY[imuPointerLast] = pitch;
+            imuAngularRotationZ[imuPointerLast] = yaw;
+        }
+
+
 
     void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg){
 
+        //std::cout<<"recevied laserCloudMsg "<< cloudHeader <<endl;
         cloudHeader = laserCloudMsg->header;
 
         timeScanCur = cloudHeader.stamp.toSec();
@@ -1804,6 +1842,9 @@ public:
     void runFeatureAssociation()
     {
 
+//        cout<<"runFeatureAssociation"<<newSegmentedCloud<<" "<<newSegmentedCloudInfo <<" "<<newOutlierCloud<<" "
+//           <<timeNewSegmentedCloudInfo<<" "<<timeNewSegmentedCloudInfo<<" "
+//          <<timeNewOutlierCloud<<" "<<timeNewOutlierCloud<<" "<<timeNewOutlierCloud<<" "<<timeNewSegmentedCloud<<endl;
         if (newSegmentedCloud && newSegmentedCloudInfo && newOutlierCloud &&
             std::abs(timeNewSegmentedCloudInfo - timeNewSegmentedCloud) < 0.05 &&
             std::abs(timeNewOutlierCloud - timeNewSegmentedCloud) < 0.05){

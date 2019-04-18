@@ -161,6 +161,7 @@ public:
     
     void cloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg){
 
+        //std::cout<<"get velodyne_points"<<endl;
         copyPointCloud(laserCloudMsg);
         findStartEndAngle();
         projectPointCloud();
@@ -168,6 +169,7 @@ public:
         cloudSegmentation();
         publishCloud();
         resetParameters();
+        //std::cout<<"imageProjection finished!"<<std::endl;
     }
 
     void findStartEndAngle(){
@@ -196,6 +198,9 @@ public:
 
             verticalAngle = atan2(thisPoint.z, sqrt(thisPoint.x * thisPoint.x + thisPoint.y * thisPoint.y)) * 180 / M_PI;
             rowIdn = (verticalAngle + ang_bottom) / ang_res_y;
+            //使用自带的线数
+            rowIdn =laserCloudIn->points[i].intensity;
+            //std::cout<<"线数"<<(verticalAngle + ang_bottom) / ang_res_y<<","<<rowIdn<<std::endl;
             if (rowIdn < 0 || rowIdn >= N_SCAN)
                 continue;
 
@@ -407,6 +412,7 @@ public:
     
     void publishCloud(){
 
+        //cout<<"publishCloud"<<endl;
         segMsg.header = cloudHeader;
         pubSegmentedCloudInfo.publish(segMsg);
 
@@ -421,8 +427,10 @@ public:
         laserCloudTemp.header.stamp = cloudHeader.stamp;
         laserCloudTemp.header.frame_id = "base_link";
         pubSegmentedCloud.publish(laserCloudTemp);
+        //cout<<"SegmentedCloud size:"<<segmentedCloud->points.size()<<"  "<<laserCloudTemp.header.stamp<<endl;
 
         if (pubFullCloud.getNumSubscribers() != 0){
+            //cout<<00<<endl;
             pcl::toROSMsg(*fullCloud, laserCloudTemp);
             laserCloudTemp.header.stamp = cloudHeader.stamp;
             laserCloudTemp.header.frame_id = "base_link";
@@ -430,6 +438,7 @@ public:
         }
 
         if (pubGroundCloud.getNumSubscribers() != 0){
+            // cout<<01<<endl;
             pcl::toROSMsg(*groundCloud, laserCloudTemp);
             laserCloudTemp.header.stamp = cloudHeader.stamp;
             laserCloudTemp.header.frame_id = "base_link";
@@ -437,6 +446,7 @@ public:
         }
 
         if (pubSegmentedCloudPure.getNumSubscribers() != 0){
+             //cout<<02<<endl;
             pcl::toROSMsg(*segmentedCloudPure, laserCloudTemp);
             laserCloudTemp.header.stamp = cloudHeader.stamp;
             laserCloudTemp.header.frame_id = "base_link";
@@ -444,6 +454,7 @@ public:
         }
 
         if (pubFullInfoCloud.getNumSubscribers() != 0){
+             //cout<<03<<endl;
             pcl::toROSMsg(*fullInfoCloud, laserCloudTemp);
             laserCloudTemp.header.stamp = cloudHeader.stamp;
             laserCloudTemp.header.frame_id = "base_link";
