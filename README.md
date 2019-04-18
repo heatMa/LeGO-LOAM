@@ -6,7 +6,7 @@ This repository contains code for a lightweight and ground optimized lidar odome
 ## Dependency
 
 - [ROS](http://wiki.ros.org/ROS/Installation) (tested with indigo and kinetic)
-- [gtsam](https://bitbucket.org/gtborg/gtsam) (Georgia Tech Smoothing and Mapping library)
+- [gtsam](https://github.com/borglab/gtsam/releases) (Georgia Tech Smoothing and Mapping library, 4.0.0-alpha2)
 
 ## Compile
 
@@ -43,6 +43,22 @@ extern const float ang_res_y = 2.0;
 extern const float ang_bottom = 15.0;
 extern const int groundScanInd = 7;
 ```
+
+Another example for Velodyne HDL-32e range image projection:
+
+```
+extern const int N_SCAN = 32;
+extern const int Horizon_SCAN = 1800;
+extern const float ang_res_x = 360.0/Horizon_SCAN;
+extern const float ang_res_y = 41.333/float(N_Scan-1);
+extern const float ang_bottom = 30.666666;
+extern const int groundScanInd = 20;
+```
+
+One important thing to keep in mind is that our current implementation for range image projection is only suitable for sensors that have evenly distributed channels. If you want to use our algorithm with Velodyne VLP-32c or HDL-64e, you need to write your own implementation for such projection. If the point cloud is not projected properly, you will lose many points and performance.
+
+If you are using your lidar with an IMU, make sure your IMU is aligned properly with the lidar. The algorithm uses IMU data to correct the point cloud distortion that is cause by sensor motion. If the IMU is not aligned properly, the usage of IMU data will deteriorate the result.
+
 ## Run the package
 
 1. Run the launch file:
@@ -56,6 +72,10 @@ Notes: The parameter "/use_sim_time" is set to "true" for simulation, "false" to
 rosbag play *.bag --clock --topic /velodyne_points /imu/data
 ```
 Notes: Though /imu/data is optinal, it can improve estimation accuracy greatly if provided. Some sample bags can be downloaded from [here](https://github.com/RobustFieldAutonomyLab/jackal_dataset_20170608) If your IMU frame doesn't align with Velodyne frame, use of IMU data will cause significant drift.
+
+## New data-set
+
+This dataset, [Stevens data-set](https://github.com/TixiaoShan/Stevens-VLP16-Dataset), is captured using a Velodyne VLP-16, which is mounted on an UGV - Clearpath Jackal, on Stevens Institute of Technology campus. The VLP-16 rotation rate is set to 10Hz. This data-set features over 20K scans and many loop-closures. 
 
 ## Cite *LeGO-LOAM*
 
