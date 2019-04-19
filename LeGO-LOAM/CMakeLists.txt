@@ -65,6 +65,8 @@ target_link_libraries(pointPublish ${catkin_LIBRARIES} ${PCL_LIBRARIES}  ${OpenC
 add_executable(groundRemove src/groundRemove.cpp)
 target_link_libraries(groundRemove ${catkin_LIBRARIES} ${PCL_LIBRARIES}  ${OpenCV_LIBRARIES})
 
+add_executable(pubKittiData src/pubKittiData.cpp)
+target_link_libraries(pubKittiData ${catkin_LIBRARIES} ${PCL_LIBRARIES}  ${OpenCV_LIBRARIES})
 
 add_executable(getOdometry
   src/getOdometry.cpp

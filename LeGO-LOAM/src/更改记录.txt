@@ -11,3 +11,12 @@
 2019/3/28
 1、查出了代码常常崩的问题所在，但是还没有找到解决办法，就是这句话的问题
 size_t latestFrameID = cloudKeyPoses3D->points.size() - 1;
+2019/4/18
+1、注释了使用velodyne自带线数，使用原来的计算线数方式
+2、为了先使用lego_loam测试KITTI Raw data，注释了GPS因子线程
+2019/4/19 修改测试kitti
+1、新加了pubKitiData.cpp，在这个文件里，完成了对Kitti的矫正过的数据（非rawData）数据读取，以及位姿数据，标定数据的转换矩阵怎么用
+2、Delete line 1752 and 1758 in featureAssociation.cpp. Line 849 change to 's=1'.
+(https://github.com/RobustFieldAutonomyLab/LeGO-LOAM/issues/12)
+  并且mapOptmization.cpp中加入了GPSfactor
+3、run_kitti.launch中加入了param useGPS选择是否用GPS，避免每次实验都要编译浪费时间

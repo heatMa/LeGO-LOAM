@@ -199,7 +199,7 @@ public:
             verticalAngle = atan2(thisPoint.z, sqrt(thisPoint.x * thisPoint.x + thisPoint.y * thisPoint.y)) * 180 / M_PI;
             rowIdn = (verticalAngle + ang_bottom) / ang_res_y;
             //使用自带的线数
-            rowIdn =laserCloudIn->points[i].intensity;
+            //rowIdn =laserCloudIn->points[i].intensity;
             //std::cout<<"线数"<<(verticalAngle + ang_bottom) / ang_res_y<<","<<rowIdn<<std::endl;
             if (rowIdn < 0 || rowIdn >= N_SCAN)
                 continue;

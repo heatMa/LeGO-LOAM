@@ -249,7 +249,7 @@ public:
         subOutlierCloudLast = nh.subscribe<sensor_msgs::PointCloud2>("/outlier_cloud_last", 2, &mapOptimization::laserCloudOutlierLastHandler, this);
         subLaserOdometry = nh.subscribe<nav_msgs::Odometry>("/laser_odom_to_init", 5, &mapOptimization::laserOdometryHandler, this);
         subImu = nh.subscribe<sensor_msgs::Imu> (imuTopic, 50, &mapOptimization::imuHandler, this);
-        subGPS = nh.subscribe<sensor_msgs::Imu> ("/imu/gps", 50, &mapOptimization::gpsHandler, this);
+        subGPS = nh.subscribe<nav_msgs::Odometry> ("/imu/gps", 50, &mapOptimization::gpsHandler, this);
 
         pubHistoryKeyFrames = nh.advertise<sensor_msgs::PointCloud2>("/history_cloud", 2);
         pubIcpKeyFrames = nh.advertise<sensor_msgs::PointCloud2>("/corrected_cloud", 2);
@@ -666,43 +666,23 @@ public:
     }
 
     //这里gpsIn里的协方差存储的GPS值
-    void gpsHandler(const sensor_msgs::Imu::ConstPtr& gpsIn){
-        
-        for(int i=0;i<9;i++)
-            gpsValue[i]=gpsIn->orientation_covariance[i];
+    void gpsHandler(const nav_msgs::Odometry::ConstPtr& gpsIn){
+        gpsValue[0]=gpsIn->pose.pose.position.x;
+        gpsValue[1]=gpsIn->pose.pose.position.y;
+        gpsValue[2]=gpsIn->pose.pose.position.z;
+        for(int i=3;i<9;i++)
+            gpsValue[i]=0;
         publish_gpsValue(gpsIn);
     }
 
-void publish_gpsValue(const sensor_msgs::ImuConstPtr& imu_msg) {
+void publish_gpsValue(const nav_msgs::Odometry::ConstPtr& gpsIn) {
         //转换为ROS Odometry格式数据发布出来
         nav_msgs::Odometry odom;
-        odom.header.stamp = imu_msg->header.stamp;
+        odom.header.stamp = gpsIn->header.stamp;
         odom.header.frame_id = "/camera";
         odom.child_frame_id = "gps";
-
-        //利用eigen从矩阵获得四元数
-        Eigen::Quaternionf quat;
-        //std::cout<<"tempVel[5]: "<<tempVel[5]<<std::endl;   //Eigen这个数组越界没有内存警告牛逼了onf quat;
-        quat = Eigen::AngleAxisf(imu_msg->orientation_covariance[6], Eigen::Vector3f::UnitX())
-                * Eigen::AngleAxisf(imu_msg->orientation_covariance[7], Eigen::Vector3f::UnitY())
-                * Eigen::AngleAxisf(imu_msg->orientation_covariance[8], Eigen::Vector3f::UnitZ());
-        quat.normalize();
-        //转换为ROS下的四元数
-        geometry_msgs::Quaternion odom_quat;
-        odom_quat.w = quat.w();
-        odom_quat.x = quat.x();
-        odom_quat.y = quat.y();
-        odom_quat.z = quat.z();
-
-        odom.pose.pose.position.x = imu_msg->orientation_covariance[1];
-        odom.pose.pose.position.y = imu_msg->orientation_covariance[2];
-        odom.pose.pose.position.z = imu_msg->orientation_covariance[0];
-        //std::cout<<imu_msg->orientation_covariance[0]<<" "<<imu_msg->orientation_covariance[1]<<" "<<imu_msg->orientation_covariance[2]<<std::endl;;
-        odom.pose.pose.orientation = odom_quat;
-        odom.twist.twist.linear.x = imu_msg->orientation_covariance[3];
-        odom.twist.twist.linear.y = imu_msg->orientation_covariance[4];
-        odom.twist.twist.linear.z = imu_msg->orientation_covariance[5];
-
+        odom.pose=gpsIn->pose;
+        odom.pose.pose.orientation.x=-odom.pose.pose.orientation.x;
         pubGPS.publish(odom);
 
     }
@@ -727,6 +707,8 @@ void publish_gpsValue(const sensor_msgs::ImuConstPtr& imu_msg) {
         odomAftMapped.twist.twist.linear.y = transformBefMapped[4];
         odomAftMapped.twist.twist.linear.z = transformBefMapped[5];
         pubOdomAftMapped.publish(odomAftMapped);
+
+        std::cout<<"lego_loam "<<transformAftMapped[3]<<" "<<transformAftMapped[4]<<" "<<transformAftMapped[5]<<std::endl;
 
         aftMappedTrans.stamp_ = ros::Time().fromSec(timeLaserOdometry);
         aftMappedTrans.setRotation(tf::Quaternion(-geoQuat.y, -geoQuat.z, geoQuat.x, geoQuat.w));
@@ -1518,7 +1500,7 @@ void publish_gpsValue(const sensor_msgs::ImuConstPtr& imu_msg) {
         gtsam::Vector3 angle;
         //pos<<gpsValue[0]+L*cos(theta)-L,gpsValue[1]+L*sin(theta),gpsValue[2]+H;
         //现在获得的直接是Lidar的位姿了
-        pos<<gpsValue[0],gpsValue[1],gpsValue[2];
+        pos<<-gpsValue[0],gpsValue[1],gpsValue[2];
         angle<<0,0,0;
 
         //位置噪声
@@ -1531,7 +1513,7 @@ void publish_gpsValue(const sensor_msgs::ImuConstPtr& imu_msg) {
         //添加GPS的不确定性
         GPSFactor gps_factor(latestFrameID,Point3(pos(0),pos(1),pos(2)),correction_noise);
         std::cout<<"GPS     : "<<pos(0)<<" "<<pos(1)<<" "<<pos(2)<<std::endl;
-        std::cout<<"AftOdo:   "<<transformAftMapped[5]<<" "<<transformAftMapped[3]<<" "<<transformAftMapped[4]<<std::endl;
+        std::cout<<"AftOdo:   "<<transformAftMapped[3]<<" "<<transformAftMapped[4]<<" "<<transformAftMapped[5]<<std::endl;
 
         std::lock_guard<std::mutex> lock(mtx);
         gtSAMgraph.add(gps_factor);
@@ -1565,6 +1547,10 @@ int main(int argc, char** argv)
     std::thread visualizeMapThread(&mapOptimization::visualizeGlobalMapThread, &MO);
     std::thread gpsthread(&mapOptimization::gpsCorrectThread,&MO);
 
+    bool useGPS=false;
+    ros::param::get("/useGPS",useGPS);
+    std::cout<<"useGPS "<<useGPS<<std::endl;
+
     ros::Rate rate(200);
     while (ros::ok())
     {
@@ -1577,7 +1563,8 @@ int main(int argc, char** argv)
 
     loopthread.join();
     visualizeMapThread.join();
-    gpsthread.join();
+    if(useGPS)
+        gpsthread.join();
 
     return 0;
 }

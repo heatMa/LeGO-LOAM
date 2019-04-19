@@ -885,7 +885,8 @@ public:
     void TransformToStart(PointType const * const pi, PointType * const po)
     {
         float s = 10 * (pi->intensity - int(pi->intensity));
-
+        //Kitti测试注释
+        s = 1;
         float rx = s * transformCur[0];
         float ry = s * transformCur[1];
         float rz = s * transformCur[2];
@@ -1786,15 +1787,16 @@ public:
         updateImuRollPitchYawStartSinCos();
 
         int cornerPointsLessSharpNum = cornerPointsLessSharp->points.size();
-        for (int i = 0; i < cornerPointsLessSharpNum; i++) {
-            TransformToEnd(&cornerPointsLessSharp->points[i], &cornerPointsLessSharp->points[i]);
-        }
+        //kitti测试注释
+//        for (int i = 0; i < cornerPointsLessSharpNum; i++) {
+//            TransformToEnd(&cornerPointsLessSharp->points[i], &cornerPointsLessSharp->points[i]);
+//        }
 
-
+        //kitti测试注释
         int surfPointsLessFlatNum = surfPointsLessFlat->points.size();
-        for (int i = 0; i < surfPointsLessFlatNum; i++) {
-            TransformToEnd(&surfPointsLessFlat->points[i], &surfPointsLessFlat->points[i]);
-        }
+//        for (int i = 0; i < surfPointsLessFlatNum; i++) {
+//            TransformToEnd(&surfPointsLessFlat->points[i], &surfPointsLessFlat->points[i]);
+//        }
 
         pcl::PointCloud<PointType>::Ptr laserCloudTemp = cornerPointsLessSharp;
         cornerPointsLessSharp = laserCloudCornerLast;

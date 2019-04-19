@@ -296,6 +296,7 @@ void getLidarInitPos(string originFileName)
     float L=1.2967;//前
     float W=-0.0795;//左
     float H=0.5389;//上
+    //Lidar全局初始位置
     Eigen::Vector3d lidar_pos=T * Eigen::Vector3d(L,W,H);
     g_originX=lidar_pos[0];
     g_originY=lidar_pos[1];
