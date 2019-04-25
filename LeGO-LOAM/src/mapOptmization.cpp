@@ -679,7 +679,7 @@ void publish_gpsValue(const nav_msgs::Odometry::ConstPtr& gpsIn) {
         //转换为ROS Odometry格式数据发布出来
         nav_msgs::Odometry odom;
         odom.header.stamp = gpsIn->header.stamp;
-        odom.header.frame_id = "/camera";
+        odom.header.frame_id = "/camera_init";
         odom.child_frame_id = "gps";
         odom.pose=gpsIn->pose;
         odom.pose.pose.orientation.x=-odom.pose.pose.orientation.x;
@@ -1523,10 +1523,17 @@ void publish_gpsValue(const nav_msgs::Odometry::ConstPtr& gpsIn) {
 
     }
 
-    void gpsCorrectThread()
+    void gpsCorrectThread(const bool& useGPS)
     {
-
         ros::Rate rate(1);
+        if(!useGPS)
+        {
+            std::cout<<"不使用GPS矫正"<<std::endl;
+            return;
+        }
+        else
+            std::cout<<"使用GPS矫正"<<std::endl;
+
         while (ros::ok()){
             rate.sleep();
             performGPSCorrect();
@@ -1541,15 +1548,18 @@ int main(int argc, char** argv)
 
     ROS_INFO("\033[1;32m---->\033[0m Map Optimization Started.");
 
+    bool useGPS=false;
+    ros::param::get("/useGPS",useGPS);
+    std::cout<<"是否使用GPS： "<<useGPS<<std::endl;
+
+
     mapOptimization MO;
 
     std::thread loopthread(&mapOptimization::loopClosureThread, &MO);
     std::thread visualizeMapThread(&mapOptimization::visualizeGlobalMapThread, &MO);
-    std::thread gpsthread(&mapOptimization::gpsCorrectThread,&MO);
+    std::thread gpsthread(&mapOptimization::gpsCorrectThread,&MO,useGPS);
 
-    bool useGPS=false;
-    ros::param::get("/useGPS",useGPS);
-    std::cout<<"useGPS "<<useGPS<<std::endl;
+
 
     ros::Rate rate(200);
     while (ros::ok())
@@ -1563,8 +1573,8 @@ int main(int argc, char** argv)
 
     loopthread.join();
     visualizeMapThread.join();
-    if(useGPS)
-        gpsthread.join();
+    gpsthread.join();
+
 
     return 0;
 }
