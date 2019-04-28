@@ -17,7 +17,7 @@
 //转换时间戳
 #include <pcl_conversions/pcl_conversions.h>
 #include <nav_msgs/Odometry.h>
-
+#include "tf/transform_datatypes.h"
 using namespace Eigen;
 using namespace std;
 using namespace pcl;
@@ -179,6 +179,7 @@ nav_msgs::Odometry getgroundTruthOdo(const Matrix4d& pose) {
 
 
 int main(int argc, char **argv)
+#include "tf/transform_datatypes.h"
 {
     ros::init(argc, argv, "pointPublish");
     ros::NodeHandle nh;
@@ -258,8 +259,14 @@ int main(int argc, char **argv)
         {
           int minute=((int)(time_list[i]-time_list[0]))/60;
           float second=time_list[i]-time_list[0]-60*minute;
-          cout << "publish第 " << i << " 帧PCD, 持续时间 "<<minute<<":"<<second<<endl;
-          cout<<"groundTruth "<<odo.pose.pose.position.x<<" "<<odo.pose.pose.position.y<<" "<<odo.pose.pose.position.z<<endl;
+          cout << "发布第 " << i << " 帧激光, 持续时间 "<<minute<<":"<<second<<endl;
+          double roll,pitch,yaw;
+
+          tf::Quaternion quat;
+          tf::quaternionMsgToTF(odo.pose.pose.orientation,quat);
+          tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+          cout<<"真值：   "<<odo.pose.pose.position.x<<" "<<odo.pose.pose.position.y<<" "<<odo.pose.pose.position.z
+             <<"  角度："<<roll/M_PI*180<<" "<<pitch/M_PI*180<<" "<<yaw/M_PI*180<<endl;
         }
 
         ros::spinOnce();
