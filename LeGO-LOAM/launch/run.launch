@@ -23,6 +23,7 @@
     <arg name="outputDirectory" default="/media/localization/新加卷/school/allSchool"  />
     <param  name="outputName" value="$(arg outputDirectory).txt" />
 
+    <param  name="useGPS" type="bool" value="true" />
 
     <node pkg="lego_loam" type="pointPublish" name="pointPublish" />
     <param name="PCD_directory" type="string" value="/media/localization/Localization/schoolData/2019024全校2/HDL/"/>

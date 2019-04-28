@@ -1541,15 +1541,22 @@ void publish_gpsValue(const sensor_msgs::ImuConstPtr& imu_msg) {
 
     }
 
-    void gpsCorrectThread()
-    {
+    void gpsCorrectThread(const bool& useGPS)
+        {
+            ros::Rate rate(1);
+            if(!useGPS)
+            {
+                std::cout<<"不使用GPS矫正"<<std::endl;
+                return;
+            }
+            else
+                std::cout<<"使用GPS矫正"<<std::endl;
 
-        ros::Rate rate(1);
-        while (ros::ok()){
-            rate.sleep();
-            performGPSCorrect();
+            while (ros::ok()){
+                rate.sleep();
+                performGPSCorrect();
+            }
         }
-    }
 };
 
 
@@ -1559,11 +1566,15 @@ int main(int argc, char** argv)
 
     ROS_INFO("\033[1;32m---->\033[0m Map Optimization Started.");
 
+    bool useGPS=false;
+    ros::param::get("/useGPS",useGPS);
+    std::cout<<"是否使用GPS： "<<useGPS<<std::endl;
+
     mapOptimization MO;
 
     std::thread loopthread(&mapOptimization::loopClosureThread, &MO);
     std::thread visualizeMapThread(&mapOptimization::visualizeGlobalMapThread, &MO);
-    std::thread gpsthread(&mapOptimization::gpsCorrectThread,&MO);
+    std::thread gpsthread(&mapOptimization::gpsCorrectThread,&MO,useGPS);
 
     ros::Rate rate(200);
     while (ros::ok())
