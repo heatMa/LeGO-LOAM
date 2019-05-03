@@ -1265,7 +1265,7 @@ public:
             ransac.setInputTarget(laserCloudCornerLast);
             ransac.setRefineModel(true);
             //阈值，如果对应点间距离大于这个值，则认为无效匹配
-            ransac.setInlierThreshold(5);
+            ransac.setInlierThreshold(10);
             correspondence_inlier->clear();
             //设置原始的配对
             ransac.setInputCorrespondences(correspondence_all);
@@ -1548,7 +1548,7 @@ public:
             //ransac.setMaximumIterations(200);
             ransac.setRefineModel(true);
             //阈值，如果对应点间距离大于这个值，则认为无效匹配
-            ransac.setInlierThreshold(5);
+            ransac.setInlierThreshold(10);
             //先要清空correspondence_inlier
             correspondence_inlier->clear();
             //设置原始的配对
