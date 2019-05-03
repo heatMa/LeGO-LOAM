@@ -62,10 +62,6 @@ target_link_libraries(transformFusion ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Ope
 add_executable(pointPublish src/pcd2bag.cpp)
 target_link_libraries(pointPublish ${catkin_LIBRARIES} ${PCL_LIBRARIES}  ${OpenCV_LIBRARIES})
 
-add_executable(groundRemove src/groundRemove.cpp)
-target_link_libraries(groundRemove ${catkin_LIBRARIES} ${PCL_LIBRARIES}  ${OpenCV_LIBRARIES})
-
-
 add_executable(getOdometry
   src/getOdometry.cpp
 )

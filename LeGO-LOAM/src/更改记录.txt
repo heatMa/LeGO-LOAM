@@ -11,3 +11,17 @@
 2019/3/28
 1、查出了代码常常崩的问题所在，但是还没有找到解决办法，就是这句话的问题
 size_t latestFrameID = cloudKeyPoses3D->points.size() - 1;
+2019/4/30使用浙大方法
+1、featureAssociation.cpp添加头文件
+2、点云要这样初始化才不会报错！！！
+pcl::PointCloud<PointType>::Ptr surfPointsFlat;
+surfPointsFlat.reset(new pcl::PointCloud<PointType>());
+或者这样
+static pcl::PointCloud<PointType>::Ptr lasttempsurfFlat(new pcl::PointCloud<PointType>);
+3、加入RANSAC后遇到的问题，没有解决
+[pcl::RandomSampleConsensus::computeModel] No samples could be selected!
+2019/5/2
+No samples could be selected!问题解决了，竟然是因为设置参数时查询和匹配顺序写反了，查了四五个小时的bug。。醉了
+2019/5/3
+1、bug1 匹配点那里写的还是有问题的。。maptch应该写id的，不知为何写成了距离
+   bug2 从平面点修改到边点时，投影坐标的地方忘记改成平面点了，导致出错，幸好查出来了
