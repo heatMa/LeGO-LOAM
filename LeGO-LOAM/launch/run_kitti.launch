@@ -20,21 +20,23 @@
     <node pkg="lego_loam" type="transformFusion"    name="transformFusion"    output="screen"/>
 
 
-    <arg name="outputDirectory" default="/media/localization/新加卷/school/allSchool"  />
-    <param  name="outputName" value="$(arg outputDirectory).txt" />
+    <!--   是否使用GPS      -->
+    <param name="useGPS" type="bool"   value="false"/>
+    <!--   是否使用RANSAC          -->
+    <param name="useRANSAC" type="bool"  value="false"/>
 
-    <param name="useGPS" type="bool"   value="true"/>
-
+    <!--   KITTI序列号和数据地址-->
     <param name="seqNum" type="string" value="01"   />
     <param name="KITTI_directory" type="string" value="/media/localization/Localization/KITTIdataset" />
 
-    <param name="PCD_directory" type="string" value="/media/localization/Localization/schoolData/2019024全校2/HDL/"/>
-
+    <!--   发布KITTI数据-->
     <node pkg="lego_loam" type="pubKittiData" name="pubKittiData" output="screen"/>
 
-
+     <!--   存储lego_loam里程计位姿信息到outputName.txt文件中  outputDirectory是存储目录   -->
     <node pkg="lego_loam" type="getOdometry" name="getOdometry" output="screen">
     </node>
+    <arg name="outputDirectory" default="/media/localization/新加卷/school/allSchool"  />
+    <param  name="outputName" value="$(arg outputDirectory).txt" />
 <!--
  <node name="recorder" pkg="rosbag" type="record" args="/laser_cloud_surround /integrated_to_init -O $(arg outputDirectory)" />
 -->
