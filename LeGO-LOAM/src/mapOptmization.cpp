@@ -708,7 +708,7 @@ void publish_gpsValue(const nav_msgs::Odometry::ConstPtr& gpsIn) {
         odomAftMapped.twist.twist.linear.z = transformBefMapped[5];
         pubOdomAftMapped.publish(odomAftMapped);
 
-        std::cout<<"lego_loam "<<transformAftMapped[3]<<" "<<transformAftMapped[4]<<" "<<transformAftMapped[5]<<std::endl;
+        std::cout<<"lego_loam里程计xyz： "<<transformAftMapped[3]<<" "<<transformAftMapped[4]<<" "<<transformAftMapped[5]<<std::endl;
 
         aftMappedTrans.stamp_ = ros::Time().fromSec(timeLaserOdometry);
         aftMappedTrans.setRotation(tf::Quaternion(-geoQuat.y, -geoQuat.z, geoQuat.x, geoQuat.w));
@@ -774,7 +774,7 @@ void publish_gpsValue(const nav_msgs::Odometry::ConstPtr& gpsIn) {
 
         downSizeFilterGlobalMapKeyFrames.setInputCloud(globalMapKeyFrames);
         downSizeFilterGlobalMapKeyFrames.filter(*globalMapKeyFramesDS);
- 
+
         sensor_msgs::PointCloud2 cloudMsgTemp;
         pcl::toROSMsg(*globalMapKeyFramesDS, cloudMsgTemp);
         cloudMsgTemp.header.stamp = ros::Time().fromSec(timeLaserOdometry);
@@ -1528,11 +1528,11 @@ void publish_gpsValue(const nav_msgs::Odometry::ConstPtr& gpsIn) {
         ros::Rate rate(1);
         if(!useGPS)
         {
-            std::cout<<"不使用GPS矫正"<<std::endl;
+            std::cout<<"是否使用GPS矫正位姿? 否"<<std::endl;
             return;
         }
         else
-            std::cout<<"使用GPS矫正"<<std::endl;
+            std::cout<<"是否使用GPS矫正位姿？ 是"<<std::endl;
 
         while (ros::ok()){
             rate.sleep();
