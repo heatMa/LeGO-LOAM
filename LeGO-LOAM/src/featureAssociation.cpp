@@ -33,7 +33,8 @@
 //      IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS). October 2018.
 
 #include "utility.h"
-
+#include <pcl/registration/correspondence_rejection_sample_consensus.h>
+#include <pcl/sample_consensus/ransac.h>
 class FeatureAssociation{
 
 private:
@@ -182,6 +183,7 @@ private:
     int frameCount;
 
 public:
+    bool useRANSAC_;
 
     FeatureAssociation():
         nh("~")
@@ -1178,6 +1180,158 @@ public:
         }
     }
 
+
+    void findCorrespondingCornerFeatures_RANSAC(int iterCount){
+
+            int cornerPointsSharpNum = cornerPointsSharp->points.size();
+
+
+            //保存所有的对应点配对
+            static boost::shared_ptr<pcl::Correspondences> correspondence_all(new pcl::Correspondences);
+            //保存RANSAC后的点配对
+            static boost::shared_ptr<pcl::Correspondences> correspondence_inlier(new pcl::Correspondences);
+            //临时配对关系
+            pcl::Correspondences correspondences;
+
+            if (iterCount % 5 == 0) {
+                for (int i = 0; i < cornerPointsSharpNum; i++) {
+
+                    TransformToStart(&cornerPointsSharp->points[i], &pointSel);
+
+                    kdtreeCornerLast->nearestKSearch(pointSel, 1, pointSearchInd, pointSearchSqDis);
+                    int closestPointInd = -1, minPointInd2 = -1;
+
+                    if (pointSearchSqDis[0] < nearestFeatureSearchSqDist) {
+                        closestPointInd = pointSearchInd[0];
+                        int closestPointScan = int(laserCloudCornerLast->points[closestPointInd].intensity);
+
+                        //将配对点的ID存入临时配对Correspondence中，一个当前点，一个配对的
+                        pcl::Correspondence Correspondence;
+                        Correspondence.index_query = i;
+                        Correspondence.index_match = closestPointInd;
+                        correspondences.push_back(Correspondence);
+
+                        float pointSqDis, minPointSqDis2 = nearestFeatureSearchSqDist;
+                        for (int j = closestPointInd + 1; j < cornerPointsSharpNum; j++) {
+                            if (int(laserCloudCornerLast->points[j].intensity) > closestPointScan + 2.5) {
+                                break;
+                            }
+
+                            pointSqDis = (laserCloudCornerLast->points[j].x - pointSel.x) *
+                                    (laserCloudCornerLast->points[j].x - pointSel.x) +
+                                    (laserCloudCornerLast->points[j].y - pointSel.y) *
+                                    (laserCloudCornerLast->points[j].y - pointSel.y) +
+                                    (laserCloudCornerLast->points[j].z - pointSel.z) *
+                                    (laserCloudCornerLast->points[j].z - pointSel.z);
+
+                            if (int(laserCloudCornerLast->points[j].intensity) > closestPointScan) {
+                                if (pointSqDis < minPointSqDis2) {
+                                    minPointSqDis2 = pointSqDis;
+                                    minPointInd2 = j;
+                                }
+                            }
+                        }
+                        for (int j = closestPointInd - 1; j >= 0; j--) {
+                            if (int(laserCloudCornerLast->points[j].intensity) < closestPointScan - 2.5) {
+                                break;
+                            }
+
+                            pointSqDis = (laserCloudCornerLast->points[j].x - pointSel.x) *
+                                    (laserCloudCornerLast->points[j].x - pointSel.x) +
+                                    (laserCloudCornerLast->points[j].y - pointSel.y) *
+                                    (laserCloudCornerLast->points[j].y - pointSel.y) +
+                                    (laserCloudCornerLast->points[j].z - pointSel.z) *
+                                    (laserCloudCornerLast->points[j].z - pointSel.z);
+
+                            if (int(laserCloudCornerLast->points[j].intensity) < closestPointScan) {
+                                if (pointSqDis < minPointSqDis2) {
+                                    minPointSqDis2 = pointSqDis;
+                                    minPointInd2 = j;
+                                }
+                            }
+                        }
+                    }
+
+                    pointSearchCornerInd1[i] = closestPointInd;
+                    pointSearchCornerInd2[i] = minPointInd2;
+                }//特征点选取与配对完毕
+                *correspondence_all = correspondences;
+
+                pcl::registration::CorrespondenceRejectorSampleConsensus<PointType> ransac;
+                //bug2 一定要加后面的new!!!!
+                std::cout<<"less边个数："<<cornerPointsLessSharp->size()<<" "<<laserCloudCornerLast->size()<<std::endl;
+
+                ransac.setInputSource(cornerPointsLessSharp);
+                ransac.setInputTarget(laserCloudCornerLast);
+                ransac.setRefineModel(true);
+                //阈值，如果对应点间距离大于这个值，则认为无效匹配
+                ransac.setInlierThreshold(10);
+                correspondence_inlier->clear();
+                //设置原始的配对
+                ransac.setInputCorrespondences(correspondence_all);
+                ransac.getCorrespondences(*correspondence_inlier);
+                //*correspondence_inlier=*correspondence_all;
+            }
+            std::cout<<"iterCount: "<<iterCount<<"  RANSAC前边对数： "<<correspondence_all->size()<<"   RANSAC后边对数： "<<correspondence_inlier->size()<<std::endl;
+            for(int j=0;j<correspondence_inlier->size();++j)
+            {
+                //RANSAC之前当前帧每个特征点的索引
+                int jj=correspondence_inlier->at(j).index_query;
+                //bug 2 这里复制过来时是平面点，忘改了
+                TransformToStart(&cornerPointsSharp->points[jj], &pointSel);
+
+                if (pointSearchCornerInd2[jj] >= 0) {
+
+                    tripod1 = laserCloudCornerLast->points[pointSearchCornerInd1[jj]];
+                    tripod2 = laserCloudCornerLast->points[pointSearchCornerInd2[jj]];
+
+                    float x0 = pointSel.x;
+                    float y0 = pointSel.y;
+                    float z0 = pointSel.z;
+                    float x1 = tripod1.x;
+                    float y1 = tripod1.y;
+                    float z1 = tripod1.z;
+                    float x2 = tripod2.x;
+                    float y2 = tripod2.y;
+                    float z2 = tripod2.z;
+
+                    float m11 = ((x0 - x1)*(y0 - y2) - (x0 - x2)*(y0 - y1));
+                    float m22 = ((x0 - x1)*(z0 - z2) - (x0 - x2)*(z0 - z1));
+                    float m33 = ((y0 - y1)*(z0 - z2) - (y0 - y2)*(z0 - z1));
+
+                    float a012 = sqrt(m11 * m11  + m22 * m22 + m33 * m33);
+
+                    float l12 = sqrt((x1 - x2)*(x1 - x2) + (y1 - y2)*(y1 - y2) + (z1 - z2)*(z1 - z2));
+
+                    float la =  ((y1 - y2)*m11 + (z1 - z2)*m22) / a012 / l12;
+
+                    float lb = -((x1 - x2)*m11 - (z1 - z2)*m33) / a012 / l12;
+
+                    float lc = -((x1 - x2)*m22 + (y1 - y2)*m33) / a012 / l12;
+
+                    float ld2 = a012 / l12;
+
+                    float s = 1;
+                    if (iterCount >= 5) {
+                        s = 1 - 1.8 * fabs(ld2);
+                    }
+
+                    if (s > 0.1 && ld2 != 0) {
+                        coeff.x = s * la;
+                        coeff.y = s * lb;
+                        coeff.z = s * lc;
+                        coeff.intensity = s * ld2;
+
+                        laserCloudOri->push_back(cornerPointsSharp->points[jj]);
+                        coeffSel->push_back(coeff);
+                    }
+                }
+            }
+
+
+        }
+
+
     void findCorrespondingSurfFeatures(int iterCount){
 
         int surfPointsFlatNum = surfPointsFlat->points.size();
@@ -1292,6 +1446,171 @@ public:
             }
         }
     }
+
+
+    //平面特征点选取与配对
+       void findCorrespondingSurfFeatures_RANSAC(int iterCount){
+
+           int surfPointsFlatNum = surfPointsFlat->points.size();
+
+           //所有的对应点配对
+           static boost::shared_ptr<pcl::Correspondences> correspondence_all(new pcl::Correspondences);
+           //RANSAC后的点配对
+           static boost::shared_ptr<pcl::Correspondences> correspondence_inlier(new pcl::Correspondences);
+           //临时配对关系
+           pcl::Correspondences correspondences;
+
+           if (iterCount % 5 == 0) {
+
+               for (int i = 0; i < surfPointsFlatNum; i++) {
+                   //投影到这一帧开始时刻
+                   TransformToStart(&surfPointsFlat->points[i], &pointSel);
+                   //寻找上一帧中的最近点
+                   kdtreeSurfLast->nearestKSearch(pointSel, 1, pointSearchInd, pointSearchSqDis);
+                   int closestPointInd = -1, minPointInd2 = -1, minPointInd3 = -1;
+
+                   if (pointSearchSqDis[0] < nearestFeatureSearchSqDist) {
+                       closestPointInd = pointSearchInd[0];
+                       //对应点的线数
+                       int closestPointScan = int(laserCloudSurfLast->points[closestPointInd].intensity);
+
+                       //将点对存入临时配对Correspondence中
+                       pcl::Correspondence Correspondence;
+                       //Fuck bug!!!!这里原来写反了。。。
+                       Correspondence.index_query = i;
+                       //有一个bug....，怎么会写成pointSearchSqDis....写ID啊
+                       Correspondence.index_match = closestPointInd;
+                       correspondences.push_back(Correspondence);
+
+
+                       float pointSqDis, minPointSqDis2 = nearestFeatureSearchSqDist, minPointSqDis3 = nearestFeatureSearchSqDist;
+                       for (int j = closestPointInd + 1; j < surfPointsFlatNum; j++) {
+                           if (int(laserCloudSurfLast->points[j].intensity) > closestPointScan + 2.5) {
+                               break;
+                           }
+
+                           pointSqDis = (laserCloudSurfLast->points[j].x - pointSel.x) *
+                                   (laserCloudSurfLast->points[j].x - pointSel.x) +
+                                   (laserCloudSurfLast->points[j].y - pointSel.y) *
+                                   (laserCloudSurfLast->points[j].y - pointSel.y) +
+                                   (laserCloudSurfLast->points[j].z - pointSel.z) *
+                                   (laserCloudSurfLast->points[j].z - pointSel.z);
+
+                           if (int(laserCloudSurfLast->points[j].intensity) <= closestPointScan) {
+                               if (pointSqDis < minPointSqDis2) {
+                                   minPointSqDis2 = pointSqDis;
+                                   minPointInd2 = j;
+                               }
+                           } else {
+                               if (pointSqDis < minPointSqDis3) {
+                                   minPointSqDis3 = pointSqDis;
+                                   minPointInd3 = j;
+                               }
+                           }
+                       }
+                       for (int j = closestPointInd - 1; j >= 0; j--) {
+                           if (int(laserCloudSurfLast->points[j].intensity) < closestPointScan - 2.5) {
+                               break;
+                           }
+
+                           pointSqDis = (laserCloudSurfLast->points[j].x - pointSel.x) *
+                                   (laserCloudSurfLast->points[j].x - pointSel.x) +
+                                   (laserCloudSurfLast->points[j].y - pointSel.y) *
+                                   (laserCloudSurfLast->points[j].y - pointSel.y) +
+                                   (laserCloudSurfLast->points[j].z - pointSel.z) *
+                                   (laserCloudSurfLast->points[j].z - pointSel.z);
+
+                           if (int(laserCloudSurfLast->points[j].intensity) >= closestPointScan) {
+                               if (pointSqDis < minPointSqDis2) {
+                                   minPointSqDis2 = pointSqDis;
+                                   minPointInd2 = j;
+                               }
+                           } else {
+                               if (pointSqDis < minPointSqDis3) {
+                                   minPointSqDis3 = pointSqDis;
+                                   minPointInd3 = j;
+                               }
+                           }
+                       }
+                   }
+                   pointSearchSurfInd1[i] = closestPointInd;
+                   pointSearchSurfInd2[i] = minPointInd2;
+                   pointSearchSurfInd3[i] = minPointInd3;
+
+               }//特征点选取与配对完毕
+
+               *correspondence_all = correspondences;
+
+               pcl::registration::CorrespondenceRejectorSampleConsensus<PointType> ransac;
+               std::cout<<"less面特征点个数："<<surfPointsLessFlat->size()<<" "<<laserCloudSurfLast->size()<<std::endl;
+
+               //surfPointsLessFlat和laserCloudSurfLast就是每一帧中总共的特征点
+               ransac.setInputSource(surfPointsLessFlat);
+               ransac.setInputTarget(laserCloudSurfLast);
+               //ransac.setMaximumIterations(200);
+               ransac.setRefineModel(true);
+               //阈值，如果对应点间距离大于这个值，则认为无效匹配
+               ransac.setInlierThreshold(10);
+               //先要清空correspondence_inlier
+               correspondence_inlier->clear();
+               //设置原始的配对
+               ransac.setInputCorrespondences(correspondence_all);
+               ransac.getCorrespondences(*correspondence_inlier);
+               //*correspondence_inlier=*correspondence_all;
+           }
+           std::cout<<"iterCount: "<<iterCount<<"  RANSAC前平面点对数："<<correspondence_all->size()<<" RANSAC后平面点对数  "<<correspondence_inlier->size()<<std::endl;
+           //pointSearchSurfInd2肯定是>=0的，因为它是搜到的最近点
+           for(int j=0;j<correspondence_inlier->size();j++)
+           {
+               //RANSAC之前当前帧每个特征点的索引
+               int jj=correspondence_inlier->at(j).index_query;
+
+               //bug1 这里要加上这句话，把点投影到上一帧结束
+               TransformToStart(&surfPointsFlat->points[jj], &pointSel);
+
+               if (pointSearchSurfInd2[jj] >= 0 && pointSearchSurfInd3[jj] >= 0) {
+
+                   tripod1 = laserCloudSurfLast->points[pointSearchSurfInd1[jj]];
+                   tripod2 = laserCloudSurfLast->points[pointSearchSurfInd2[jj]];
+                   tripod3 = laserCloudSurfLast->points[pointSearchSurfInd3[jj]];
+
+                   float pa = (tripod2.y - tripod1.y) * (tripod3.z - tripod1.z)
+                           - (tripod3.y - tripod1.y) * (tripod2.z - tripod1.z);
+                   float pb = (tripod2.z - tripod1.z) * (tripod3.x - tripod1.x)
+                           - (tripod3.z - tripod1.z) * (tripod2.x - tripod1.x);
+                   float pc = (tripod2.x - tripod1.x) * (tripod3.y - tripod1.y)
+                           - (tripod3.x - tripod1.x) * (tripod2.y - tripod1.y);
+                   float pd = -(pa * tripod1.x + pb * tripod1.y + pc * tripod1.z);
+
+                   float ps = sqrt(pa * pa + pb * pb + pc * pc);
+
+                   pa /= ps;
+                   pb /= ps;
+                   pc /= ps;
+                   pd /= ps;
+
+                   float pd2 = pa * pointSel.x + pb * pointSel.y + pc * pointSel.z + pd;
+
+                   float s = 1;
+                   if (iterCount >= 5) {
+                       s = 1 - 1.8 * fabs(pd2) / sqrt(sqrt(pointSel.x * pointSel.x
+                                                           + pointSel.y * pointSel.y + pointSel.z * pointSel.z));
+                   }
+
+                   if (s > 0.1 && pd2 != 0) {
+                       coeff.x = s * pa;
+                       coeff.y = s * pb;
+                       coeff.z = s * pc;
+                       coeff.intensity = s * pd2;
+
+                       laserCloudOri->push_back(surfPointsFlat->points[jj]);
+                       coeffSel->push_back(coeff);
+                   }
+               }
+           }
+
+       }
+
 
     bool calculateTransformationSurf(int iterCount){
 
@@ -1698,7 +2017,11 @@ public:
             laserCloudOri->clear();
             coeffSel->clear();
 
-            findCorrespondingSurfFeatures(iterCount1);
+            //add by Ma
+            if(useRANSAC_==true)
+                findCorrespondingSurfFeatures_RANSAC(iterCount1);
+            else
+                findCorrespondingSurfFeatures(iterCount1);
 
             if (laserCloudOri->points.size() < 10)
                 continue;
@@ -1711,7 +2034,11 @@ public:
             laserCloudOri->clear();
             coeffSel->clear();
 
-            findCorrespondingCornerFeatures(iterCount2);
+            //add by Ma
+            if(useRANSAC_==true)
+                findCorrespondingCornerFeatures_RANSAC(iterCount2);
+            else
+                findCorrespondingCornerFeatures(iterCount2);
 
             if (laserCloudOri->points.size() < 10)
                 continue;
@@ -1895,6 +2222,16 @@ int main(int argc, char** argv)
     ROS_INFO("\033[1;32m---->\033[0m Feature Association Started.");
 
     FeatureAssociation FA;
+
+    //add by Ma
+    bool useRANSAC=false;
+    ros::param::get("/useRANSAC",useRANSAC);
+    FA.useRANSAC_=useRANSAC;
+    std::cout<<"是否使用RANSAC： ";
+    if(useRANSAC==true)
+        std::cout<<"是"<<std::endl;
+    else
+        std::cout<<"否"<<std::endl;
 
     ros::Rate rate(200);
     while (ros::ok())
