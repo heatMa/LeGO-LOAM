@@ -25,8 +25,12 @@
 
     <param  name="useGPS" type="bool" value="false" />
 
+    <!--
     <node pkg="lego_loam" type="pointPublish" name="pointPublish" />
     <param name="PCD_directory" type="string" value="/media/localization/Localization/schoolData/2019024全校2/HDL/"/>
+    -->
+    <node pkg="rosbag" type="play" name="play" output="screen" args="/media/localization/Localization/schoolData/2019-04-05-14-30-20.bag --topic /velodyne_points"/>
+
 
     <node pkg="loam_velodyne" type="getOdometry" name="getOdometry" output="screen">
     </node>
