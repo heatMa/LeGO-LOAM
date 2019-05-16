@@ -1,3 +1,8 @@
+LeGO-LOAM浙大分支使用方法：
+# 更改bag文件为你自己的地址，需要写成全局地址名，放到run.launch里这句话里的args=""里。
+<node pkg="rosbag" type="play" name="play" output="screen" args="/media/localization/Localization/schoolData/2019-04-04-16-18-25.bag --topic /velodyne_points"/>
+
+
 # LeGO-LOAM
 
 This repository contains code for a lightweight and ground optimized lidar odometry and mapping (LeGO-LOAM) system for ROS compatible UGVs. The system takes in point cloud  from a Velodyne VLP-16 Lidar (palced horizontal) and optional IMU data as inputs. It outputs 6D pose estimation in real-time. A demonstration of the system can be found here -> https://www.youtube.com/watch?v=O3tz_ftHV48
