@@ -186,7 +186,9 @@ private:
     //boost::shared_ptr<pcl::Correspondences> correspondence_inlier(new pcl::Correspondences);
 
 public:
-
+    bool useRANSAC_;
+    //RANSAC阈值
+    int ransacThreshold_;
     FeatureAssociation():
         nh("~")
     {
@@ -1265,7 +1267,7 @@ public:
             ransac.setInputTarget(laserCloudCornerLast);
             ransac.setRefineModel(true);
             //阈值，如果对应点间距离大于这个值，则认为无效匹配
-            ransac.setInlierThreshold(10);
+            ransac.setInlierThreshold(ransacThreshold_);
             correspondence_inlier->clear();
             //设置原始的配对
             ransac.setInputCorrespondences(correspondence_all);
@@ -1467,6 +1469,7 @@ public:
                 kdtreeSurfLast->nearestKSearch(pointSel, 1, pointSearchInd, pointSearchSqDis);
                 int closestPointInd = -1, minPointInd2 = -1, minPointInd3 = -1;
 
+                //如果最近点距离小于5m
                 if (pointSearchSqDis[0] < nearestFeatureSearchSqDist) {
                     closestPointInd = pointSearchInd[0];
                     //对应点的线数
@@ -1548,7 +1551,7 @@ public:
             //ransac.setMaximumIterations(200);
             ransac.setRefineModel(true);
             //阈值，如果对应点间距离大于这个值，则认为无效匹配
-            ransac.setInlierThreshold(10);
+            ransac.setInlierThreshold(ransacThreshold_);
             //先要清空correspondence_inlier
             correspondence_inlier->clear();
             //设置原始的配对
@@ -2015,8 +2018,11 @@ public:
             laserCloudOri->clear();
             coeffSel->clear();
 
-            //findCorrespondingSurfFeatures(iterCount1);
-            findCorrespondingSurfFeatures_RANSAC(iterCount1);
+            //add by Ma
+            if(useRANSAC_==true)
+                findCorrespondingSurfFeatures_RANSAC(iterCount1);
+            else
+                findCorrespondingSurfFeatures(iterCount1);
 
             //注意这里，点数小于10的话就不计算了，所以RANSAC后点数也不能太少
             if (laserCloudOri->points.size() < 10)
@@ -2030,8 +2036,12 @@ public:
             laserCloudOri->clear();
             coeffSel->clear();
 
-            //findCorrespondingCornerFeatures(iterCount2);
-            findCorrespondingCornerFeatures_RANSAC(iterCount2);
+
+            //add by Ma
+            if(useRANSAC_==true)
+                findCorrespondingCornerFeatures_RANSAC(iterCount2);
+            else
+                findCorrespondingCornerFeatures(iterCount2);
 
             if (laserCloudOri->points.size() < 10)
                 continue;
@@ -2214,6 +2224,19 @@ int main(int argc, char** argv)
     ROS_INFO("\033[1;32m---->\033[0m Feature Association Started.");
 
     FeatureAssociation FA;
+
+    //add by Ma
+    bool useRANSAC=false;
+    ros::param::get("/useRANSAC",useRANSAC);
+    ros::param::get("/ransacThreshold_",FA.ransacThreshold_);
+    FA.useRANSAC_=useRANSAC;
+    std::cout<<"是否使用RANSAC： ";
+    if(useRANSAC==true)
+    {
+        std::cout<<"是"<<"  ransac阈值: "<<FA.ransacThreshold_<<endl;
+    }
+    else
+        std::cout<<"否"<<std::endl;
 
     ros::Rate rate(200);
     while (ros::ok())
