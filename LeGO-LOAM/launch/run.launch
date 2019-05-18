@@ -25,16 +25,13 @@
 
 <param  name="useGPS" type="bool" value="false" />
 
-<param name="useRANSAC" type="bool"  value="true"/>
+<param name="useRANSAC" type="bool"  value="false"/>
 <!-- ransac阈值  -->
 <param name="ransacThreshold_" type="int"  value="10"/>
 
-<!--
+
 <node pkg="lego_loam" type="pointPublish" name="pointPublish" />
 <param name="PCD_directory" type="string" value="/media/localization/Localization/schoolData/2019024全校2/HDL/"/>
--->
-<node pkg="rosbag" type="play" name="play" output="screen" args="/media/localization/Localization/schoolData/2019-04-04-16-18-25.bag --topic /velodyne_points"/>
-
 
 <node pkg="loam_velodyne" type="getOdometry" name="getOdometry" output="screen">
 </node>
