@@ -35,6 +35,16 @@
 #include "utility.h"
 #include <pcl/registration/correspondence_rejection_sample_consensus.h>
 #include <pcl/sample_consensus/ransac.h>
+
+#include <pcl/common/transforms.h>
+#include <pcl/console/parse.h>
+#include <pcl/console/time.h>
+#include <pcl/point_types.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/ransac.h>
+#include <pcl/sample_consensus/sac_model_registration.h>
+#include <time.h>
 class FeatureAssociation{
 
 private:
@@ -1194,7 +1204,8 @@ public:
         static boost::shared_ptr<pcl::Correspondences> correspondence_inlier(new pcl::Correspondences);
         //临时配对关系
         pcl::Correspondences correspondences;
-
+        //经过ransac后剩下的有效点
+        static std::vector<int> inliers;
         if (iterCount % 5 == 0) {
             for (int i = 0; i < cornerPointsSharpNum; i++) {
 
@@ -1259,26 +1270,20 @@ public:
             }//特征点选取与配对完毕
             *correspondence_all = correspondences;
 
-            pcl::registration::CorrespondenceRejectorSampleConsensus<PointType> ransac;
-            //bug2 一定要加后面的new!!!!
-            std::cout<<"less边个数："<<cornerPointsLessSharp->size()<<" "<<laserCloudCornerLast->size()<<std::endl;
+            Eigen::Matrix4f transform;
+            double thresh = 0.3;
 
-            ransac.setInputSource(cornerPointsLessSharp);
-            ransac.setInputTarget(laserCloudCornerLast);
-            ransac.setRefineModel(true);
-            //阈值，如果对应点间距离大于这个值，则认为无效匹配
-            ransac.setInlierThreshold(ransacThreshold_);
-            correspondence_inlier->clear();
-            //设置原始的配对
-            ransac.setInputCorrespondences(correspondence_all);
-            ransac.getCorrespondences(*correspondence_inlier);
-            //*correspondence_inlier=*correspondence_all;
+            double start=clock();
+            inliers.clear();
+            compute(cornerPointsSharp,laserCloudCornerLast,transform,thresh,correspondence_all,inliers);
+            std::cout<<" 边特征点: "<<iterCount<<"  "<< (double)(clock()-start)/CLOCKS_PER_SEC<<"  "<<cornerPointsSharp->size()<<"  "<<inliers.size()<<std::endl;
         }
-        std::cout<<"iterCount: "<<iterCount<<"  边关联点大小："<<correspondence_all->size()<<"  "<<correspondence_inlier->size()<<std::endl;
-        for(int j=0;j<correspondence_inlier->size();++j)
+
+        for(int j=0;j<inliers.size();j++)
         {
             //RANSAC之前当前帧每个特征点的索引
-            int jj=correspondence_inlier->at(j).index_query;
+            //int jj=correspondence_all->at(inliers[j]).index_query;
+            int jj=inliers[j];
             //bug 2 这里复制过来时是平面点，忘改了
             TransformToStart(&cornerPointsSharp->points[jj], &pointSel);
 
@@ -1459,7 +1464,8 @@ public:
         static boost::shared_ptr<pcl::Correspondences> correspondence_inlier(new pcl::Correspondences);
         //临时配对关系
         pcl::Correspondences correspondences;
-
+        //内点
+        static std::vector<int> inliers;
         if (iterCount % 5 == 0) {
 
             for (int i = 0; i < surfPointsFlatNum; i++) {
@@ -1542,30 +1548,23 @@ public:
 
             *correspondence_all = correspondences;
 
-            pcl::registration::CorrespondenceRejectorSampleConsensus<PointType> ransac;
-            std::cout<<"less面特征点个数："<<surfPointsLessFlat->size()<<" "<<laserCloudSurfLast->size()<<std::endl;
+            Eigen::Matrix4f transform;
+            double thresh = 0.1;
 
-            //surfPointsLessFlat和laserCloudSurfLast就是每一帧中总共的特征点
-            ransac.setInputSource(surfPointsLessFlat);
-            ransac.setInputTarget(laserCloudSurfLast);
-            //ransac.setMaximumIterations(200);
-            ransac.setRefineModel(true);
-            //阈值，如果对应点间距离大于这个值，则认为无效匹配
-            ransac.setInlierThreshold(ransacThreshold_);
-            //先要清空correspondence_inlier
-            correspondence_inlier->clear();
-            //设置原始的配对
-            ransac.setInputCorrespondences(correspondence_all);
-            ransac.getCorrespondences(*correspondence_inlier);
-            //*correspondence_inlier=*correspondence_all;
+            double start=clock();
+            inliers.clear();
+            compute(surfPointsFlat,laserCloudSurfLast,transform,thresh,correspondence_all,inliers);
+            std::cout<<"     面特征点: "<<iterCount<<"  "<< (double)(clock()-start)/CLOCKS_PER_SEC<<"  "<<correspondence_all->size()<<"  "<<inliers.size()<<std::endl;
+//            for(int i=0;i<inliers.size();i++)
+//                cout<<inliers[i]<<",";
         }
-        std::cout<<"iterCount: "<<iterCount<<"  平面关联点大小："<<correspondence_all->size()<<"  "<<correspondence_inlier->size()<<std::endl;
+
         //pointSearchSurfInd2肯定是>=0的，因为它是搜到的最近点
-        for(int j=0;j<correspondence_inlier->size();j++)
+        for(int j=0;j<inliers.size();j++)
         {
             //RANSAC之前当前帧每个特征点的索引
-            int jj=correspondence_inlier->at(j).index_query;
-
+            //int jj=correspondence_all->at(inliers[j]).index_query;
+            int jj=inliers[j];
             //bug1 这里要加上这句话，把点投影到上一帧结束
             TransformToStart(&surfPointsFlat->points[jj], &pointSel);
 
@@ -1612,6 +1611,41 @@ public:
 
     }
 
+
+    void compute(const pcl::PointCloud<PointType>::Ptr &input,const pcl::PointCloud<PointType>::Ptr &target,
+        Eigen::Matrix4f &transformation,const double thresh,const boost::shared_ptr<pcl::Correspondences> &correspondence,
+                 std::vector<int>& inliers)
+    {
+        //对应点对的索引点
+        vector<int> indices_src;
+        vector<int> indices_tgt;
+        for(int j=0;j<correspondence->size();j++)
+        {
+            int jj=correspondence->at(j).index_query;
+            int kk=correspondence->at(j).index_match;
+            indices_src.push_back(jj);
+            indices_tgt.push_back(kk);
+        }
+
+        pcl::SampleConsensusModelRegistration<PointType>::Ptr model (new pcl::SampleConsensusModelRegistration<PointType> (input,indices_src));
+        model->setInputTarget (target,indices_tgt);
+
+        pcl::RandomSampleConsensus<PointType> sac (model, thresh);
+        //sac.setMaxIterations (100000);
+
+        if (!sac.computeModel (2))
+        {
+            PCL_ERROR ("Could not compute a valid transformation!\n");
+            return;
+        }
+        Eigen::VectorXf coeff;
+        sac.getModelCoefficients (coeff);
+        sac.getInliers(inliers);
+        transformation.row (0) = coeff.segment<4>(0);
+        transformation.row (1) = coeff.segment<4>(4);
+        transformation.row (2) = coeff.segment<4>(8);
+        transformation.row (3) = coeff.segment<4>(12);
+    }
 
     bool calculateTransformationSurf(int iterCount){
 
