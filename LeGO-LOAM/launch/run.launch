@@ -30,12 +30,13 @@
 <param name="ransacThreshold_" type="int"  value="10"/>
 
 
-<node pkg="lego_loam" type="pointPublish" name="pointPublish" />
-<param name="PCD_directory" type="string" value="/media/localization/Localization/schoolData/2019024全校2/HDL/"/>
+<node pkg="rosbag" type="play" name="play" output="screen" args="/media/localization/Localization/schoolData/2019-04-04-16-18-25.bag --topic /velodyne_points"/>
 
 <node pkg="loam_velodyne" type="getOdometry" name="getOdometry" output="screen">
 </node>
 <!--
+<node pkg="lego_loam" type="pointPublish" name="pointPublish" />
+<param name="PCD_directory" type="string" value="/media/localization/Localization/schoolData/2019024全校2/HDL/"/>
 <node name="recorder" pkg="rosbag" type="record" args="/laser_cloud_surround /integrated_to_init -O $(arg outputDirectory)" />
 -->
 

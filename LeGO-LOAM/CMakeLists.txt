@@ -65,8 +65,14 @@ target_link_libraries(pointPublish ${catkin_LIBRARIES} ${PCL_LIBRARIES}  ${OpenC
 add_executable(getOdometry
   src/getOdometry.cpp
 )
+
 add_dependencies(getOdometry ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(getOdometry
   ${catkin_LIBRARIES}
 )
 
+add_library(zheda_sac_model_registration src/zheda_sac_model_registration.cpp)
+target_link_libraries(zheda_sac_model_registration
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
