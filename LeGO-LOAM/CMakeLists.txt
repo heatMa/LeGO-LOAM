@@ -71,8 +71,15 @@ target_link_libraries(getOdometry
   ${catkin_LIBRARIES}
 )
 
-add_library(zheda_sac_model_registration src/zheda_sac_model_registration.cpp)
-target_link_libraries(zheda_sac_model_registration
+#add_library(zheda_sac_model_registration src/zheda_sac_model_registration.cpp)
+#target_link_libraries(zheda_sac_model_registration
+ # ${catkin_LIBRARIES}
+  #${PCL_LIBRARIES}
+#)
+
+
+add_library(zhedaransac src/zhedaransac.cpp)
+target_link_libraries(zhedaransac
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
 )
