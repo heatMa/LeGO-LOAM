@@ -7,21 +7,25 @@
 #include <pcl/sample_consensus/sac.h>
 #include <pcl/sample_consensus/sac_model.h>
 
-
+//RANSAC模型类，使用变换矩阵作为模型参数
 class RansacModel{
 public:
 
     typedef PointType PointT;
 
-    //这是两个指针，与源码中的名字相同，方便修改
+    //命名两个指针，与源码中的名字相同，方便修改
     typedef pcl::PointCloud<PointT>::ConstPtr PointCloudConstPtr;
     typedef pcl::PointCloud<PointT>::Ptr PointCloudPtr;
+
     //类指针
     typedef boost::shared_ptr<RansacModel> Ptr;
     typedef boost::shared_ptr<const RansacModel> ConstPtr;
 
+    //样本大小 和 模型参数大小
     unsigned int sample_size_;
     unsigned int model_size_;
+
+    //输入输出点云和对应关联点的索引
     pcl::PointCloud<PointT>::ConstPtr input_;
     pcl::PointCloud<PointT>::ConstPtr  target_;
     boost::shared_ptr <std::vector<int> > indices_;
@@ -31,14 +35,12 @@ public:
     std::map<int, int> correspondences_;
 
     /** Data containing a shuffled version of the indices. This is used and modified when drawing samples. */
-    //to do
     std::vector<int> shuffled_indices_;
 
     std::vector<double> error_sqr_dists_;
     static const unsigned int max_sample_checks_ = 1000;
 
-    //采样距离，需要注意，初始化为0，后面自己计算了sac_model_registration.h中自己计算的
-    //to do
+    //采样距离，需要注意，初始化为0，后面根据输入点云计算得到
     double sample_dist_thresh_;
 
 
@@ -323,6 +325,7 @@ public:
     }
 
 
+    //选择符合最好模型的内点
     void selectWithinDistance (const Eigen::VectorXf &model_coefficients, const double threshold, std::vector<int> &inliers)
     {
         if (indices_->size () != indices_tgt_->size ())
@@ -380,6 +383,7 @@ public:
         error_sqr_dists_.resize (nr_p);
     }
 
+    //根据所有内点计算变换矩阵，暂时没有用到
     void optimizeModelCoefficients (const std::vector<int> &inliers, const Eigen::VectorXf &model_coefficients, Eigen::VectorXf &optimized_coefficients) const
     {
         if (indices_->size () != indices_tgt_->size ())
@@ -456,11 +460,9 @@ public:
     }
 
 
-    /** \brief Compute the actual model and find the inliers
-        * \param[in] debug_verbosity_level enable/disable on-screen debug information and set the verbosity level
-        */
+    //计算模型
     bool computeModel (int debug_verbosity_level = 0);
-
+    //获取内点
     inline void
           getInliers (std::vector<int> &inliers) const { inliers = inliers_; }
 };
@@ -469,6 +471,7 @@ public:
 //////////////////////////////////////////////////////////////////////////
 bool ZhedaRansac::computeModel (int)
 {
+
     // Warn and exit if no threshold was set
     if (threshold_ == std::numeric_limits<double>::max())
     {
@@ -496,7 +499,6 @@ bool ZhedaRansac::computeModel (int)
     {
         // Get X samples which satisfy the model criteria
         sac_model_->getSamples (iterations_, selection);
-
         if (selection.empty ())
         {
             PCL_ERROR ("[pcl::RandomSampleConsensus::computeModel] No samples could be selected!\n");
@@ -517,7 +519,6 @@ bool ZhedaRansac::computeModel (int)
         //  continue;
 
         n_inliers_count = sac_model_->countWithinDistance (model_coefficients, threshold_);
-
         // Better match ?
         if (n_inliers_count > n_best_inliers_count)
         {
@@ -551,7 +552,6 @@ bool ZhedaRansac::computeModel (int)
         inliers_.clear ();
         return (false);
     }
-
     // Get the set of inliers that correspond to the best model found so far
     sac_model_->selectWithinDistance (model_coefficients_, threshold_, inliers_);
     return (true);

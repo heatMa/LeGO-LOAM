@@ -33,7 +33,8 @@
 //      IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS). October 2018.
 
 #include "utility.h"
-#include "zheda_sac_model_registration.cpp"
+//#include "zheda_sac_model_registration.cpp"
+#include "zhedaransac.cpp"
 #include <pcl/registration/correspondence_rejection_sample_consensus.h>
 #include <pcl/sample_consensus/ransac.h>
 
@@ -2062,29 +2063,34 @@ public:
             indices_tgt.push_back(kk);
         }
 
-        pcl::SampleConsensusModelRegistration<PointType>::Ptr model (new pcl::SampleConsensusModelRegistration<PointType> (input,indices_src));
-        //pcl::ZhedaSampleConsensusModelRegistration<PointType>::Ptr model (new pcl::ZhedaSampleConsensusModelRegistration<PointType> (input,indices_src));
-        model->setInputTarget (target,indices_tgt);
+//        //pcl库中的ransac
+//        pcl::SampleConsensusModelRegistration<PointType>::Ptr model (new pcl::SampleConsensusModelRegistration<PointType> (input,indices_src));
+//        model->setInputTarget (target,indices_tgt);
+//        pcl::RandomSampleConsensus<PointType> sac (model, thresh);
 
-        pcl::RandomSampleConsensus<PointType> sac (model, thresh);
-        //sac.setMaxIterations (100000);
+
+        //自己用从源码重新写的ransac
+        RansacModel::Ptr model (new RansacModel(indices_src,indices_tgt));
+        model->setInputAndTargerCloud (input,target,indices_src);
+        ZhedaRansac sac (model, thresh);
 
         if (!sac.computeModel (2))
         {
             PCL_ERROR ("Could not compute a valid transformation!\n");
             return;
         }
-        //模型参数
-        Eigen::VectorXf coeff;
-        //计算模型参数
-        sac.getModelCoefficients (coeff);
+
         //获取内点
         sac.getInliers(inliers);
-        //获取变换矩阵
-        transformation.row (0) = coeff.segment<4>(0);
-        transformation.row (1) = coeff.segment<4>(4);
-        transformation.row (2) = coeff.segment<4>(8);
-        transformation.row (3) = coeff.segment<4>(12);
+        std::cout<<"inliers size "<<inliers.size()<<std::endl;
+
+//        //获取变换矩阵  这里的问题！！！自己把sac.getModelCoefficients(coeff)注释了，所以下面没有数据，导致程序中断
+//        Eigen::VectorXf coeff;
+//        sac.getModelCoefficients (coeff);
+//        transformation.row (0) = coeff.segment<4>(0);
+//        transformation.row (1) = coeff.segment<4>(4);
+//        transformation.row (2) = coeff.segment<4>(8);
+//        transformation.row (3) = coeff.segment<4>(12);
     }
     //由平面点计算帧间变化量
     bool calculateTransformationSurf(int iterCount){
