@@ -208,6 +208,14 @@ private:
     //RANSAC后的点配对
     //boost::shared_ptr<pcl::Correspondences> correspondence_inlier(new pcl::Correspondences);
 
+    //浙大RANSAC中使用的bin
+    vector<pcl::PointCloud<PointType>::Ptr> sharpPointsBin;
+    vector<pcl::PointCloud<PointType>::Ptr> flatPointsBin;
+    vector<vector<int>> sharpBinIdx;
+    vector<vector<int>> flatBinIdx;
+    vector<pcl::PointCloud<PointType>::Ptr> lessSharpPointsBin;
+    vector<pcl::PointCloud<PointType>::Ptr> lessFlatPointsBin;
+
 public:
     bool useRANSAC_;
     //RANSAC阈值
@@ -239,6 +247,23 @@ public:
 
     void initializationValue()
     {
+
+        sharpPointsBin.resize(N_SCAN * 6);
+        flatPointsBin.resize(N_SCAN * 6);
+        sharpBinIdx.resize(N_SCAN * 6);
+        flatBinIdx.resize(N_SCAN * 6);
+
+        lessSharpPointsBin.resize(N_SCAN * 6);
+        lessFlatPointsBin.resize(N_SCAN * 6);
+
+        for(int i=0;i<N_SCAN * 6;i++)
+        {
+            sharpPointsBin[i].reset(new pcl::PointCloud<PointType>());
+            flatPointsBin[i].reset(new pcl::PointCloud<PointType>());
+            lessSharpPointsBin[i].reset(new pcl::PointCloud<PointType>());
+            lessFlatPointsBin[i].reset(new pcl::PointCloud<PointType>());
+        }
+
         cloudSmoothness.resize(N_SCAN*Horizon_SCAN);
 
         downSizeFilter.setLeafSize(0.2, 0.2, 0.2);
@@ -738,6 +763,18 @@ public:
 
     void extractFeatures()
     {
+
+        //清空Bin中的数据
+        for(int i=0;i<N_SCAN * 6;i++)
+        {
+            sharpPointsBin[i]->clear();
+            flatPointsBin[i]->clear();
+            lessSharpPointsBin[i]->clear();
+            lessFlatPointsBin[i]->clear();
+            sharpBinIdx[i].clear();
+            flatBinIdx[i].clear();
+        }
+
         cornerPointsSharp->clear();
         cornerPointsLessSharp->clear();
         surfPointsFlat->clear();
@@ -745,9 +782,9 @@ public:
 
         for (int i = 0; i < N_SCAN; i++) {
 
-            surfPointsLessFlatScan->clear();
-
             for (int j = 0; j < 6; j++) {
+
+                surfPointsLessFlatScan->clear();
 
                 int sp = (segInfo.startRingIndex[i] * (6 - j)    + segInfo.endRingIndex[i] * j) / 6;
                 int ep = (segInfo.startRingIndex[i] * (5 - j)    + segInfo.endRingIndex[i] * (j + 1)) / 6 - 1;
@@ -757,6 +794,7 @@ public:
 
                 std::sort(cloudSmoothness.begin()+sp, cloudSmoothness.begin()+ep, by_value());
 
+                //边点处理
                 int largestPickedNum = 0;
                 for (int k = ep; k >= sp; k--) {
                     int ind = cloudSmoothness[k].ind;
@@ -769,9 +807,19 @@ public:
                             cloudLabel[ind] = 2;
                             cornerPointsSharp->push_back(segmentedCloud->points[ind]);
                             cornerPointsLessSharp->push_back(segmentedCloud->points[ind]);
+
+                            //放入相应边点bin中
+                            sharpPointsBin[i * 6 + j ]->push_back((segmentedCloud->points[ind]));
+                            //记录Bin中的点在sharp点云中的索引
+                            sharpBinIdx[i * 6 + j].push_back(cornerPointsSharp->points.size()-1);
+                            //放入less点bin中
+                            lessSharpPointsBin[i * 6 + j ]->push_back((segmentedCloud->points[ind]));
+
                         } else if (largestPickedNum <= 20) {
                             cloudLabel[ind] = 1;
                             cornerPointsLessSharp->push_back(segmentedCloud->points[ind]);
+                            //放入less点bin中
+                            lessSharpPointsBin[i * 6 + j ]->push_back((segmentedCloud->points[ind]));
                         } else {
                             break;
                         }
@@ -792,6 +840,7 @@ public:
                     }
                 }
 
+                //面点处理
                 int smallestPickedNum = 0;
                 for (int k = sp; k <= ep; k++) {
                     int ind = cloudSmoothness[k].ind;
@@ -801,6 +850,13 @@ public:
 
                         cloudLabel[ind] = -1;
                         surfPointsFlat->push_back(segmentedCloud->points[ind]);
+
+                        //放入当前面点bin中
+                        flatPointsBin[i * 6 + j ]->push_back(segmentedCloud->points[ind]);
+                        //记录Bin中的点在flat点云中的索引
+                        flatBinIdx[i * 6 + j].push_back(surfPointsFlat->points.size()-1);
+                        //放入less点bin中
+                        lessFlatPointsBin[i * 6 + j ]->push_back(segmentedCloud->points[ind]);
 
                         smallestPickedNum++;
                         if (smallestPickedNum >= 4) {
@@ -827,18 +883,24 @@ public:
                     }
                 }
 
+                //获取地面点
                 for (int k = sp; k <= ep; k++) {
-                    if (cloudLabel[k] <= 0) {
+                    if (cloudLabel[k] == 0) {//这里原本是<=0,改为==0,把曲率最小的四个点去掉，因为前面已经放到lessSharp中了
                         surfPointsLessFlatScan->push_back(segmentedCloud->points[k]);
                     }
                 }
+
+                //下面这段代码本来是在第二个for循环外面的，先把所有的surfPointsLessFlatScanDS都累加起来，
+                //再做降采样，再加到surfPointsLessFlat,现在放到for循环里面后，相当于是先降采样，再累加， 这样平面点会增加
+                surfPointsLessFlatScanDS->clear();
+                downSizeFilter.setInputCloud(surfPointsLessFlatScan);
+                downSizeFilter.filter(*surfPointsLessFlatScanDS);
+
+                *surfPointsLessFlat += *surfPointsLessFlatScanDS;
+
+                //放入less点bin中
+                *lessFlatPointsBin[i * 6 + j]+=*surfPointsLessFlatScanDS;
             }
-
-            surfPointsLessFlatScanDS->clear();
-            downSizeFilter.setInputCloud(surfPointsLessFlatScan);
-            downSizeFilter.filter(*surfPointsLessFlatScanDS);
-
-            *surfPointsLessFlat += *surfPointsLessFlatScanDS;
         }
     }
 
@@ -1447,15 +1509,15 @@ public:
             }
             std::cout<<" 边特征点: "<<iterCount<<"  "<< (double)(clock()-start)/CLOCKS_PER_SEC<<"  "<<correspondence_all->size()<<"  "<<inliers.size()<<"  "<<ransac_outlierCloudSharp->size()<<std::endl;
 
-//            Eigen::Matrix3f rotation;
-//            rotation=transform.block(0,0,3,3);
-//            Eigen::Vector3f angles=rotation.eulerAngles(0,1,2);
-//            Eigen::Vector3f translation=transform.block(0,3,3,1);
-//            for(int i=0;i<3;i++)
-//                cout<<angles[i]/3.14*180<<",";
-//            for(int i=0;i<3;i++)
-//                cout<<translation[i]<<",";
-//            std::cout<<std::endl;
+            //            Eigen::Matrix3f rotation;
+            //            rotation=transform.block(0,0,3,3);
+            //            Eigen::Vector3f angles=rotation.eulerAngles(0,1,2);
+            //            Eigen::Vector3f translation=transform.block(0,3,3,1);
+            //            for(int i=0;i<3;i++)
+            //                cout<<angles[i]/3.14*180<<",";
+            //            for(int i=0;i<3;i++)
+            //                cout<<translation[i]<<",";
+            //            std::cout<<std::endl;
         }
 
         //对所有的内点
@@ -1638,6 +1700,192 @@ public:
     //平面特征点选取与配对
     void findCorrespondingSurfFeatures_RANSAC(int iterCount){
 
+
+        int surfPointsFlatNum= surfPointsFlat->points.size();
+
+        //所有的对应点配对
+        static boost::shared_ptr<pcl::Correspondences> correspondence_all(new pcl::Correspondences);
+        //RANSAC后的点配对
+        static boost::shared_ptr<pcl::Correspondences> correspondence_inlier(new pcl::Correspondences);
+        //临时配对关系
+        pcl::Correspondences correspondences;
+        //内点
+        static std::vector<int> inliers;
+        if (iterCount % 5 == 0) {
+
+            for (int i = 0; i < surfPointsFlatNum; i++) {
+                //投影到这一帧开始时刻
+                TransformToStart(&surfPointsFlat->points[i], &pointSel);
+
+                //寻找上一帧中的最近点
+                kdtreeSurfLast->nearestKSearch(pointSel, 1, pointSearchInd, pointSearchSqDis);
+                int closestPointInd = -1, minPointInd2 = -1, minPointInd3 = -1;
+
+                //如果最近点距离小于5m
+                if (pointSearchSqDis[0] < nearestFeatureSearchSqDist) {
+                    closestPointInd = pointSearchInd[0];
+                    //对应点的线数
+                    int closestPointScan = int(laserCloudSurfLast->points[closestPointInd].intensity);
+
+                    //将点对存入临时配对Correspondence中
+                    pcl::Correspondence Correspondence;
+                    //Fuck bug!!!!这里原来写反了。。。
+                    Correspondence.index_query = i;
+                    //有一个bug....，怎么会写成pointSearchSqDis....写ID啊
+                    Correspondence.index_match = closestPointInd;
+                    correspondences.push_back(Correspondence);
+
+
+                    float pointSqDis, minPointSqDis2 = nearestFeatureSearchSqDist, minPointSqDis3 = nearestFeatureSearchSqDist;
+                    for (int j = closestPointInd + 1; j < surfPointsFlatNum; j++) {
+                        if (int(laserCloudSurfLast->points[j].intensity) > closestPointScan + 2.5) {
+                            break;
+                        }
+
+                        pointSqDis = (laserCloudSurfLast->points[j].x - pointSel.x) *
+                                (laserCloudSurfLast->points[j].x - pointSel.x) +
+                                (laserCloudSurfLast->points[j].y - pointSel.y) *
+                                (laserCloudSurfLast->points[j].y - pointSel.y) +
+                                (laserCloudSurfLast->points[j].z - pointSel.z) *
+                                (laserCloudSurfLast->points[j].z - pointSel.z);
+
+                        if (int(laserCloudSurfLast->points[j].intensity) <= closestPointScan) {
+                            if (pointSqDis < minPointSqDis2) {
+                                minPointSqDis2 = pointSqDis;
+                                minPointInd2 = j;
+                            }
+                        } else {
+                            if (pointSqDis < minPointSqDis3) {
+                                minPointSqDis3 = pointSqDis;
+                                minPointInd3 = j;
+                            }
+                        }
+                    }
+                    for (int j = closestPointInd - 1; j >= 0; j--) {
+                        if (int(laserCloudSurfLast->points[j].intensity) < closestPointScan - 2.5) {
+                            break;
+                        }
+
+                        pointSqDis = (laserCloudSurfLast->points[j].x - pointSel.x) *
+                                (laserCloudSurfLast->points[j].x - pointSel.x) +
+                                (laserCloudSurfLast->points[j].y - pointSel.y) *
+                                (laserCloudSurfLast->points[j].y - pointSel.y) +
+                                (laserCloudSurfLast->points[j].z - pointSel.z) *
+                                (laserCloudSurfLast->points[j].z - pointSel.z);
+
+                        if (int(laserCloudSurfLast->points[j].intensity) >= closestPointScan) {
+                            if (pointSqDis < minPointSqDis2) {
+                                minPointSqDis2 = pointSqDis;
+                                minPointInd2 = j;
+                            }
+                        } else {
+                            if (pointSqDis < minPointSqDis3) {
+                                minPointSqDis3 = pointSqDis;
+                                minPointInd3 = j;
+                            }
+                        }
+                    }
+                }
+                pointSearchSurfInd1[i] = closestPointInd;
+                pointSearchSurfInd2[i] = minPointInd2;
+                pointSearchSurfInd3[i] = minPointInd3;
+
+            }//特征点选取与配对完毕
+
+            *correspondence_all = correspondences;
+
+            Eigen::Matrix4f transform;
+            double thresh = 0.5;
+
+            double start=clock();
+            inliers.clear();
+            compute(surfPointsFlat,laserCloudSurfLast,transform,thresh,correspondence_all,inliers);
+
+            //获取平面特征点的外点
+            ransac_outlierCloudFlat->clear();
+            int idx=0;
+            int j=0;
+            while(j<correspondence_all->size() && idx<inliers.size())
+            {
+                int jj=correspondence_all->at(j).index_query;
+                if(inliers[idx]!=jj)
+                {
+                    ransac_outlierCloudFlat->push_back(surfPointsFlat->points[jj]);
+                    j++;
+                }
+                else {
+                    idx++;
+                    j++;
+                }
+            }
+            while(j<correspondence_all->size())
+            {
+                int jj=correspondence_all->at(j).index_query;
+                //if(inliers[idx]!=jj)
+                {
+                    ransac_outlierCloudFlat->push_back(surfPointsFlat->points[jj]);
+                    j++;
+                }
+            }
+            std::cout<<"     面特征点: "<<iterCount<<" "<< (double)(clock()-start)/CLOCKS_PER_SEC<<"  "<<correspondence_all->size()<<"  "<<inliers.size()<<"  "<<ransac_outlierCloudFlat->size()<<std::endl;
+        }
+
+        //pointSearchSurfInd2肯定是>=0的，因为它是搜到的最近点
+        for(int j=0;j<inliers.size();j++)
+        {
+            //RANSAC之前当前帧每个特征点的索引
+            //int jj=correspondence_all->at(inliers[j]).index_query;
+            int jj=inliers[j];
+            //bug1 这里要加上这句话，把点投影到上一帧结束
+            TransformToStart(&surfPointsFlat->points[jj], &pointSel);
+
+            if (pointSearchSurfInd2[jj] >= 0 && pointSearchSurfInd3[jj] >= 0) {
+
+                tripod1 = laserCloudSurfLast->points[pointSearchSurfInd1[jj]];
+                tripod2 = laserCloudSurfLast->points[pointSearchSurfInd2[jj]];
+                tripod3 = laserCloudSurfLast->points[pointSearchSurfInd3[jj]];
+
+                float pa = (tripod2.y - tripod1.y) * (tripod3.z - tripod1.z)
+                        - (tripod3.y - tripod1.y) * (tripod2.z - tripod1.z);
+                float pb = (tripod2.z - tripod1.z) * (tripod3.x - tripod1.x)
+                        - (tripod3.z - tripod1.z) * (tripod2.x - tripod1.x);
+                float pc = (tripod2.x - tripod1.x) * (tripod3.y - tripod1.y)
+                        - (tripod3.x - tripod1.x) * (tripod2.y - tripod1.y);
+                float pd = -(pa * tripod1.x + pb * tripod1.y + pc * tripod1.z);
+
+                float ps = sqrt(pa * pa + pb * pb + pc * pc);
+
+                pa /= ps;
+                pb /= ps;
+                pc /= ps;
+                pd /= ps;
+
+                float pd2 = pa * pointSel.x + pb * pointSel.y + pc * pointSel.z + pd;
+
+                float s = 1;
+                if (iterCount >= 5) {
+                    s = 1 - 1.8 * fabs(pd2) / sqrt(sqrt(pointSel.x * pointSel.x
+                                                        + pointSel.y * pointSel.y + pointSel.z * pointSel.z));
+                }
+
+                if (s > 0.1 && pd2 != 0) {
+                    coeff.x = s * pa;
+                    coeff.y = s * pb;
+                    coeff.z = s * pc;
+                    coeff.intensity = s * pd2;
+
+                    laserCloudOri->push_back(surfPointsFlat->points[jj]);
+                    coeffSel->push_back(coeff);
+                }
+            }
+        }
+
+    }
+
+
+    //平面特征点选取与配对
+    void findCorrespondingSurfFeatures_zhedaRANSAC(int iterCount,const pcl::PointCloud<PointType>::Ptr &inputCloud){
+
         int surfPointsFlatNum = surfPointsFlat->points.size();
 
         //所有的对应点配对
@@ -1737,18 +1985,6 @@ public:
             inliers.clear();
             compute(surfPointsFlat,laserCloudSurfLast,transform,thresh,correspondence_all,inliers);
 
-            //            for(int i=0;i<inliers.size();i++)
-            //                cout<<inliers[i]<<",";
-//            Eigen::Matrix3f rotation;
-//            rotation=transform.block(0,0,3,3);
-//            Eigen::Vector3f angles=rotation.eulerAngles(0,1,2);
-//            Eigen::Vector3f translation=transform.block(0,3,3,1);
-//            for(int i=0;i<3;i++)
-//                std::cout<<angles[i]/3.14*180<<",";
-//            for(int i=0;i<3;i++)
-//                std::cout<<translation[i]<<",";
-//            std::cout<<std::endl;
-
             //获取平面特征点的外点
             ransac_outlierCloudFlat->clear();
             int idx=0;
@@ -1775,11 +2011,8 @@ public:
                     j++;
                 }
             }
-
-             std::cout<<"     面特征点: "<<iterCount<<" "<< (double)(clock()-start)/CLOCKS_PER_SEC<<"  "<<correspondence_all->size()<<"  "<<inliers.size()<<"  "<<ransac_outlierCloudFlat->size()<<std::endl;
+            std::cout<<"     面特征点: "<<iterCount<<" "<< (double)(clock()-start)/CLOCKS_PER_SEC<<"  "<<correspondence_all->size()<<"  "<<inliers.size()<<"  "<<ransac_outlierCloudFlat->size()<<std::endl;
         }
-
-
 
         //pointSearchSurfInd2肯定是>=0的，因为它是搜到的最近点
         for(int j=0;j<inliers.size();j++)
@@ -2063,10 +2296,10 @@ public:
             indices_tgt.push_back(kk);
         }
 
-//        //pcl库中的ransac
-//        pcl::SampleConsensusModelRegistration<PointType>::Ptr model (new pcl::SampleConsensusModelRegistration<PointType> (input,indices_src));
-//        model->setInputTarget (target,indices_tgt);
-//        pcl::RandomSampleConsensus<PointType> sac (model, thresh);
+        //        //pcl库中的ransac
+        //        pcl::SampleConsensusModelRegistration<PointType>::Ptr model (new pcl::SampleConsensusModelRegistration<PointType> (input,indices_src));
+        //        model->setInputTarget (target,indices_tgt);
+        //        pcl::RandomSampleConsensus<PointType> sac (model, thresh);
 
 
         //自己用从源码重新写的ransac
@@ -2084,13 +2317,13 @@ public:
         sac.getInliers(inliers);
         std::cout<<"inliers size "<<inliers.size()<<std::endl;
 
-//        //获取变换矩阵  这里的问题！！！自己把sac.getModelCoefficients(coeff)注释了，所以下面没有数据，导致程序中断
-//        Eigen::VectorXf coeff;
-//        sac.getModelCoefficients (coeff);
-//        transformation.row (0) = coeff.segment<4>(0);
-//        transformation.row (1) = coeff.segment<4>(4);
-//        transformation.row (2) = coeff.segment<4>(8);
-//        transformation.row (3) = coeff.segment<4>(12);
+        //        //获取变换矩阵  这里的问题！！！自己把sac.getModelCoefficients(coeff)注释了，所以下面没有数据，导致程序中断
+        //        Eigen::VectorXf coeff;
+        //        sac.getModelCoefficients (coeff);
+        //        transformation.row (0) = coeff.segment<4>(0);
+        //        transformation.row (1) = coeff.segment<4>(4);
+        //        transformation.row (2) = coeff.segment<4>(8);
+        //        transformation.row (3) = coeff.segment<4>(12);
     }
     //由平面点计算帧间变化量
     bool calculateTransformationSurf(int iterCount){
@@ -2578,12 +2811,12 @@ public:
         transformSum[4] = ty;
         transformSum[5] = tz;
 
-//        std::cout<<"transformSum:  ";
-//        for(int i=0;i<3;i++)
-//            std::cout<<transformSum[i]/3.14*180<<",";
-//        for(int i=3;i<6;i++)
-//            std::cout<<transformSum[i]<<",";
-//        cout<<endl;
+        //        std::cout<<"transformSum:  ";
+        //        for(int i=0;i<3;i++)
+        //            std::cout<<transformSum[i]/3.14*180<<",";
+        //        for(int i=3;i<6;i++)
+        //            std::cout<<transformSum[i]<<",";
+        //        cout<<endl;
     }
 
     void publishOdometry(){
@@ -2700,7 +2933,6 @@ public:
         markOccludedPoints();
 
         extractFeatures();
-
         publishCloud();
 
         if (!systemInitedLM) {
