@@ -219,6 +219,11 @@ private:
     vector<vector<int>> lessSharpBinIdx;
     vector<vector<int>> lessFlatBinIdx;
 
+    //内点比率
+    vector<float> inlierLessSharpRate;
+    vector<float> inlierLessFlatRate;
+
+
 public:
     bool useRANSAC_;
     //RANSAC阈值
@@ -260,6 +265,9 @@ public:
         lessFlatPointsBin.resize(N_SCAN * 6);
         lessSharpBinIdx.resize(N_SCAN * 6);
         lessFlatBinIdx.resize(N_SCAN * 6);
+
+        inlierLessSharpRate.resize(N_SCAN * 6);
+        inlierLessFlatRate.resize(N_SCAN * 6);
 
         for(int i=0;i<N_SCAN * 6;i++)
         {
@@ -818,15 +826,15 @@ public:
                             sharpPointsBin[i * 6 + j ]->push_back((segmentedCloud->points[ind]));
                             sharpBinIdx[i * 6 + j].push_back(cornerPointsSharp->points.size()-1);
                             //放入less点bin中
-                            lessSharpPointsBin[i * 6 + j ]->push_back((segmentedCloud->points[ind]));
-                            lessSharpBinIdx[i * 6 + j].push_back(cornerPointsSharp->points.size()-1);
+                            lessSharpPointsBin[i * 6 + j]->push_back((segmentedCloud->points[ind]));
+                            lessSharpBinIdx[i * 6 + j].push_back(lessSharpPointsBin[i * 6 + j]->points.size()-1);
 
                         } else if (largestPickedNum <= 20) {
                             cloudLabel[ind] = 1;
                             cornerPointsLessSharp->push_back(segmentedCloud->points[ind]);
                             //放入less点bin中
                             lessSharpPointsBin[i * 6 + j ]->push_back((segmentedCloud->points[ind]));
-                            lessSharpBinIdx[i * 6 + j].push_back(cornerPointsSharp->points.size()-1);
+                            lessSharpBinIdx[i * 6 + j].push_back(lessSharpPointsBin[i * 6 + j]->points.size()-1);
                         } else {
                             break;
                         }
@@ -859,11 +867,11 @@ public:
                         surfPointsFlat->push_back(segmentedCloud->points[ind]);
 
                         //放入当前面点bin中,记录Bin中的点在flat点云中的索引
-                        flatPointsBin[i * 6 + j ]->push_back(segmentedCloud->points[ind]);
+                        flatPointsBin[i * 6 + j]->push_back(segmentedCloud->points[ind]);
                         flatBinIdx[i * 6 + j].push_back(surfPointsFlat->points.size()-1);
                         //放入less点bin中
-                        lessFlatPointsBin[i * 6 + j ]->push_back(segmentedCloud->points[ind]);
-                        lessFlatBinIdx[i * 6 + j].push_back(surfPointsFlat->points.size()-1);
+                        lessFlatPointsBin[i * 6 + j]->push_back(segmentedCloud->points[ind]);
+                        lessFlatBinIdx[i * 6 + j].push_back(lessFlatPointsBin[i * 6 + j ]->points.size()-1);
 
                         smallestPickedNum++;
                         if (smallestPickedNum >= 4) {
@@ -907,8 +915,10 @@ public:
                 *surfPointsLessFlat += *surfPointsLessFlatScanDS;
 
                 //放入less点bin中
+                for(int k=0;k<surfPointsLessFlatScanDS->size();k++)
+                    lessFlatBinIdx[i * 6 + j].push_back(lessFlatPointsBin[i * 6 + j]->size() + i);
+
                 *lessFlatPointsBin[i * 6 + j]+=*surfPointsLessFlatScanDS;
-                lessFlatBinIdx[i * 6 + j].push_back(surfPointsFlat->points.size()-1);
             }
         }
     }
@@ -1598,6 +1608,38 @@ public:
             std::cout<<" 边特征点: "<<iterCount<<"  "<< (double)(clock()-start)/CLOCKS_PER_SEC<<"  "<<correspondence_all->size()<<"  "<<inliers.size()<<"  "<<ransac_outlierCloudSharp->size()<<std::endl;
         }
 
+
+        //统计各个bin中内点数量,放入到inlierNum中
+        map<int,int> inlierNum;
+        for(int i=0;i<N_SCAN * 6;i++)
+            inlierNum[i]=0;
+
+        int ii=0;
+        int idx;
+        for(int jj=0;jj<lessSharpBinIdx.size()&&ii<inliers.size();jj++)
+        {
+            for(int kk=0;kk<lessSharpBinIdx[jj].size()&&ii<inliers.size();kk++)
+            {
+                idx=inliers[ii];
+                if(idx==lessSharpBinIdx[jj][kk])
+                {
+                    inlierNum[jj]++;
+                    ii++;
+                }
+            }
+        }
+        //存储内点比率
+        inlierLessSharpRate.clear();
+        for(int jj=0;jj<lessSharpBinIdx.size();jj++)
+        {
+            float rate=0;
+//            if(inlierNum[jj]!=0)
+//                cout<<"lessSharpBinIdx[jj].size() "<< lessSharpBinIdx[jj].size()<<endl;
+            if(lessSharpBinIdx[jj].size()!=0)
+                rate=inlierNum[jj]/lessSharpBinIdx[jj].size();
+            inlierLessSharpRate.push_back(rate);
+        }
+
         //对所有的内点
         for(int j=0;j<inliers.size();j++)
         {
@@ -1971,7 +2013,7 @@ public:
         static boost::shared_ptr<pcl::Correspondences> correspondence_inlier(new pcl::Correspondences);
         //临时配对关系
         pcl::Correspondences correspondences;
-        //内点
+        //内点索引
         static std::vector<int> inliers;
         if (iterCount % 5 == 0) {
 
@@ -2056,7 +2098,7 @@ public:
             *correspondence_all = correspondences;
 
             Eigen::Matrix4f transform;
-            double thresh = 0.5;
+            double thresh = 0.1;
 
             double start=clock();
             inliers.clear();
@@ -2089,6 +2131,38 @@ public:
                 }
             }
             std::cout<<"     面特征点: "<<iterCount<<" "<< (double)(clock()-start)/CLOCKS_PER_SEC<<"  "<<correspondence_all->size()<<"  "<<inliers.size()<<"  "<<ransac_outlierCloudFlat->size()<<std::endl;
+        }
+
+
+        //统计各个bin中内点数量
+        map<int,int> inlierNum;
+        for(int i=0;i<N_SCAN * 6;i++)
+            inlierNum[i]=0;
+
+        int ii=0;
+        int idx;
+        for(int jj=0;jj<lessFlatBinIdx.size()&&ii<inliers.size();jj++)
+        {
+            for(int kk=0;kk<lessFlatBinIdx[jj].size()&&ii<inliers.size();kk++)
+            {
+                idx=inliers[ii];
+                if(idx==lessFlatBinIdx[jj][kk])
+                {
+                    inlierNum[jj]++;
+                    ii++;
+                }
+            }
+        }
+        //存储内点比率
+        inlierLessFlatRate.clear();
+        for(int jj=0;jj<lessFlatBinIdx.size();jj++)
+        {
+            float rate=0;
+            //            if(inlierNum[jj]!=0)
+            //                cout<<"lessFlatBinIdx[jj].size() "<< lessFlatBinIdx[jj].size()<<endl;
+            if(lessFlatBinIdx[jj].size()!=0)
+                rate=inlierNum[jj]/lessFlatBinIdx[jj].size();
+            inlierLessFlatRate.push_back(rate);
         }
 
         //pointSearchSurfInd2肯定是>=0的，因为它是搜到的最近点
@@ -2393,7 +2467,7 @@ public:
 
         //获取内点
         sac.getInliers(inliers);
-        std::cout<<"inliers size "<<inliers.size()<<std::endl;
+        //        std::cout<<"inliers size "<<inliers.size()<<std::endl;
 
         //        //获取变换矩阵  这里的问题！！！自己把sac.getModelCoefficients(coeff)注释了，所以下面没有数据，导致程序中断
         //        Eigen::VectorXf coeff;
