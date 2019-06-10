@@ -834,14 +834,14 @@ public:
                             sharpBinIdx[i * 6 + j].push_back(cornerPointsSharp->points.size()-1);
                             //放入less点bin中
                             lessSharpPointsBin[i * 6 + j]->push_back((segmentedCloud->points[ind]));
-                            lessSharpBinIdx[i * 6 + j].push_back(lessSharpPointsBin[i * 6 + j]->points.size()-1);
+                            lessSharpBinIdx[i * 6 + j].push_back(cornerPointsLessSharp->points.size()-1);
 
                         } else if (largestPickedNum <= 20) {
                             cloudLabel[ind] = 1;
                             cornerPointsLessSharp->push_back(segmentedCloud->points[ind]);
                             //放入less点bin中
                             lessSharpPointsBin[i * 6 + j ]->push_back((segmentedCloud->points[ind]));
-                            lessSharpBinIdx[i * 6 + j].push_back(lessSharpPointsBin[i * 6 + j]->points.size()-1);
+                            lessSharpBinIdx[i * 6 + j].push_back(cornerPointsLessSharp->points.size()-1);
                         } else {
                             break;
                         }
@@ -878,7 +878,7 @@ public:
                         flatBinIdx[i * 6 + j].push_back(surfPointsFlat->points.size()-1);
                         //放入less点bin中
                         lessFlatPointsBin[i * 6 + j]->push_back(segmentedCloud->points[ind]);
-                        lessFlatBinIdx[i * 6 + j].push_back(lessFlatPointsBin[i * 6 + j ]->points.size()-1);
+                        lessFlatBinIdx[i * 6 + j].push_back(surfPointsLessFlat->points.size()-1);
 
                         smallestPickedNum++;
                         if (smallestPickedNum >= 4) {
@@ -919,11 +919,11 @@ public:
                 downSizeFilter.setInputCloud(surfPointsLessFlatScan);
                 downSizeFilter.filter(*surfPointsLessFlatScanDS);
 
-                *surfPointsLessFlat += *surfPointsLessFlatScanDS;
-
-                //放入less点bin中
+                //存储平面点在特征点云中的索引到binIdx中
                 for(int k=0;k<surfPointsLessFlatScanDS->size();k++)
-                    lessFlatBinIdx[i * 6 + j].push_back(lessFlatPointsBin[i * 6 + j]->size() + i);
+                    lessFlatBinIdx[i * 6 + j].push_back(surfPointsLessFlat->size() + k);
+
+                *surfPointsLessFlat += *surfPointsLessFlatScanDS;
 
                 *lessFlatPointsBin[i * 6 + j]+=*surfPointsLessFlatScanDS;
             }
