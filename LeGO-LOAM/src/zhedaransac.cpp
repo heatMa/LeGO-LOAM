@@ -182,15 +182,20 @@ public:
         std::copy (shuffled_indices_.begin (), shuffled_indices_.begin () + sample_size, sample.begin ());
     }
 
-    //按概率采样
+    //按概率采样,bin和src_indices_要分开，bin只是用来选择最小样本的，而src_indices_是用来找到最好的模型划分内外点的
     inline void darwProbSample(const vector<int> &bin, const vector<float> &prob,std::vector<int> &sample)
     {
         size_t sample_size = sample.size ();
 
         //扩充矩阵
+        //首先计算加权后的概率
+        float probSum=0;
+        for(int i=0;i<prob.size();i++)
+            probSum+=prob[i];
+        //根据概率扩充矩阵
         vector<int> intProb;
         for(size_t i=0;i<prob.size();i++)
-            intProb.push_back((int)(prob[i]*100));
+            intProb.push_back((int)(prob[i] * 1000 / probSum ));
         //prob_indices_是扩充后的矩阵
         prob_indices_.clear();
         for(int i=0;i<bin.size();i++)
@@ -546,7 +551,7 @@ bool ZhedaRansac::computeModel (int)
     // Iterate
     while (iterations_ < k && skipped_count < max_skip)
     {
-        // Get X samples which satisfy the model criteria
+        //这里selection就是大小为3的一个vecotr，存储的是点的索引
         sac_model_->getSamples (iterations_, selection);
         if (selection.empty ())
         {

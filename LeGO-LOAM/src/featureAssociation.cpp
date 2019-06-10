@@ -1577,18 +1577,39 @@ public:
             }//特征点选取与配对完毕
             *correspondence_all = correspondences;
 
+
+            //最后要传入ransac的bin，每个bin中只选取第一个点，改点的曲率最大或者最小
+            vector<int> corrLessSharpBinIdx(N_SCAN * 6 , 0);
+            int ii=0;
+            int idx;
+            for(int jj=0;jj<lessSharpBinIdx.size()&&ii<correspondence_all->size();jj++)
+            {
+                for(int kk=0;kk<lessSharpBinIdx[jj].size()&&ii<correspondence_all->size();kk++)
+                {
+                    idx=correspondence_all->at(ii).index_query;
+                    if(idx==lessSharpBinIdx[jj][kk])
+                    {
+                        corrLessSharpBinIdx[jj]=idx;
+                        ii++;
+                        break;
+                    }
+                    ii++;
+                }
+            }
+
+
             Eigen::Matrix4f transform;
             double thresh = 0.3;
 
             double start=clock();
             inliers.clear();
             //使用pcl::SampleConsensusModelRegistration去除外点
-            compute(inputCloud,laserCloudCornerLast,transform,thresh,correspondence_all,inliers);
+            compute_zheda(inputCloud,laserCloudCornerLast,transform,thresh,correspondence_all,corrLessSharpBinIdx,lastInlierLessSharpRate,inliers);
 
 
             //获取边特征点的外点
             ransac_outlierCloudSharp->clear();
-            int idx=0;
+            idx=0;
             int j=0;
             while(j<correspondence_all->size() && idx<inliers.size())
             {
@@ -2109,22 +2130,33 @@ public:
 
 
 
-            //一个点所属的bin
-            int binI=0,binJ=0;
-            //计算该点属于哪个bin 9:31-
-            for(;binI<lessFlatBinIdx.size();binI++)
-                for(;binJ<lessFlatBinIdx[binI].size();binJ++)
-                {
-//                    if(i==lessFlatBinIdx[binI][binJ])
+            //最后要传入ransac的bin，每个bin中只选取第一个点，改点的曲率最大或者最小
+            vector<int> corrLessFlatBinIdx(N_SCAN * 6 , 0);
+            vector<vector<int>> tempBinIdx;
+            tempBinIdx.resize(N_SCAN*6);
+            //            //一个点所属的bin
+            //            int binI=0,binJ=0;
+            //            int ii=0;
+            //            int idx;
+            //            //计算该点属于哪个bin 9:31-
+            //            while(binI<lessFlatBinIdx.size()&&ii<correspondence_all->size())
+            //            {
+            //                while(binJ<lessFlatBinIdx[binI].size()&&ii<correspondence_all->size())
+            //                {
+            //                    idx=correspondence_all->at(ii).index_query;
+            //                    if(idx==lessFlatBinIdx[binI][binJ])
+            //                    {
+            //                        corrLessFlatBinIdx[binI]=idx;
+            //                        binI++;
+            //                        binJ=0;
+            //                        ii++;
+            //                        break;
+            //                    }
+            //                    ii++;
+            //                }
+            //            }
 
-                }
-
-            vector<pcl::PointCloud<PointType>::Ptr> corrLessSharpPointsBin;
-            vector<pcl::PointCloud<PointType>::Ptr> corrLessFlatPointsBin;
-            vector<vector<int>> corrLessFlatBinIdx;
-            corrLessFlatBinIdx.resize(N_SCAN * 6);
-
-
+            //从每个bin中提取出一个已经关联的点
             int ii=0;
             int idx;
             for(int jj=0;jj<lessFlatBinIdx.size()&&ii<correspondence_all->size();jj++)
@@ -2134,20 +2166,27 @@ public:
                     idx=correspondence_all->at(ii).index_query;
                     if(idx==lessFlatBinIdx[jj][kk])
                     {
+                        tempBinIdx[jj].push_back(idx);
                         ii++;
                     }
                 }
             }
+            for(int jj=0;jj<lessFlatBinIdx.size();jj++)
+            {
+                if(!lessFlatBinIdx[jj].empty())
+                    corrLessFlatBinIdx.push_back(lessFlatBinIdx[jj][0]);
+            }
 
 
-
+            for(int i=0;i<corrLessFlatBinIdx.size();i++)
+                std::cout<<"flat:"<<corrLessFlatBinIdx[i]<<" ";
+            std::cout<<std::endl;
 
             Eigen::Matrix4f transform;
             double thresh = 0.1;
-
             double start=clock();
             inliers.clear();
-            compute(inputCloud,laserCloudSurfLast,transform,thresh,correspondence_all,inliers);
+            compute_zheda(inputCloud,laserCloudSurfLast,transform,thresh,correspondence_all,corrLessFlatBinIdx,lastInlierLessFlatRate,inliers);
 
             //获取平面特征点的外点
             ransac_outlierCloudFlat->clear();
@@ -2207,9 +2246,9 @@ public:
             //                cout<<"lessFlatBinIdx[jj].size() "<< lessFlatBinIdx[jj].size()<<endl;
             if(lessFlatBinIdx[jj].size()!=0)
             {
-            rate=inlierNum[jj]/lessFlatBinIdx[jj].size();
-            if(rate<0.2)
-                rate=0.2;
+                rate=inlierNum[jj]/lessFlatBinIdx[jj].size();
+                if(rate<0.2)
+                    rate=0.2;
             }
 
             inlierLessFlatRate.push_back(rate);
@@ -2481,11 +2520,45 @@ public:
 
     }
 
-
     //使用pcl::SampleConsensusModelRegistration去除外点
     void compute(const pcl::PointCloud<PointType>::Ptr &input,const pcl::PointCloud<PointType>::Ptr &target,
-                 Eigen::Matrix4f &transformation,const double thresh,const boost::shared_ptr<pcl::Correspondences> &correspondence,
+                 Eigen::Matrix4f &transformation,const double thresh,
+                 const boost::shared_ptr<pcl::Correspondences> &correspondence,
                  std::vector<int>& inliers)
+    {
+        //对应点对的索引点
+        vector<int> indices_src;
+        vector<int> indices_tgt;
+        for(int j=0;j<correspondence->size();j++)
+        {
+            int jj=correspondence->at(j).index_query;
+            int kk=correspondence->at(j).index_match;
+            indices_src.push_back(jj);
+            indices_tgt.push_back(kk);
+        }
+        //        //pcl库中的ransac
+        //        pcl::SampleConsensusModelRegistration<PointType>::Ptr model (new pcl::SampleConsensusModelRegistration<PointType> (input,indices_src));
+        //        model->setInputTarget (target,indices_tgt);
+        //        pcl::RandomSampleConsensus<PointType> sac (model, thresh);
+        //自己用从源码重新写的ransac
+        RansacModel::Ptr model (new RansacModel(indices_src,indices_tgt));
+        model->setInputAndTargerCloud (input,target,indices_src);
+        ZhedaRansac sac (model, thresh);
+
+        if (!sac.computeModel (2))
+        {
+            PCL_ERROR ("Could not compute a valid transformation!\n");
+            return;
+        }
+        //获取内点
+        sac.getInliers(inliers);
+    }
+
+    //使用pcl::SampleConsensusModelRegistration去除外点
+    void compute_zheda(const pcl::PointCloud<PointType>::Ptr &input,const pcl::PointCloud<PointType>::Ptr &target,
+                       Eigen::Matrix4f &transformation,const double thresh,const boost::shared_ptr<pcl::Correspondences> &correspondence,
+                       const std::vector<int> &bin,const std::vector<float> &prob,
+                       std::vector<int>& inliers)
     {
         //对应点对的索引点
         vector<int> indices_src;
