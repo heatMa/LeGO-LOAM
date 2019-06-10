@@ -222,6 +222,8 @@ private:
     //内点比率
     vector<float> inlierLessSharpRate;
     vector<float> inlierLessFlatRate;
+    vector<float> lastInlierLessSharpRate;
+    vector<float> lastInlierLessFlatRate;
 
 
 public:
@@ -268,6 +270,8 @@ public:
 
         inlierLessSharpRate.resize(N_SCAN * 6);
         inlierLessFlatRate.resize(N_SCAN * 6);
+        lastInlierLessSharpRate.resize(N_SCAN * 6);
+        lastInlierLessFlatRate.resize(N_SCAN * 6);
 
         for(int i=0;i<N_SCAN * 6;i++)
         {
@@ -790,6 +794,9 @@ public:
             lessSharpBinIdx[i].clear();
             lessFlatBinIdx[i].clear();
         }
+        //赋值上一次的bin比率
+        lastInlierLessSharpRate=inlierLessSharpRate;
+        lastInlierLessFlatRate=inlierLessFlatRate;
 
         cornerPointsSharp->clear();
         cornerPointsLessSharp->clear();
@@ -1633,10 +1640,12 @@ public:
         for(int jj=0;jj<lessSharpBinIdx.size();jj++)
         {
             float rate=0;
-//            if(inlierNum[jj]!=0)
-//                cout<<"lessSharpBinIdx[jj].size() "<< lessSharpBinIdx[jj].size()<<endl;
+            //            if(inlierNum[jj]!=0)
+            //                cout<<"lessSharpBinIdx[jj].size() "<< lessSharpBinIdx[jj].size()<<endl;
             if(lessSharpBinIdx[jj].size()!=0)
                 rate=inlierNum[jj]/lessSharpBinIdx[jj].size();
+            if(rate<0.2)
+                rate=0.2;
             inlierLessSharpRate.push_back(rate);
         }
 
@@ -2015,6 +2024,7 @@ public:
         pcl::Correspondences correspondences;
         //内点索引
         static std::vector<int> inliers;
+
         if (iterCount % 5 == 0) {
 
             for (int i = 0; i < inputCloudNum; i++) {
@@ -2097,6 +2107,41 @@ public:
 
             *correspondence_all = correspondences;
 
+
+
+            //一个点所属的bin
+            int binI=0,binJ=0;
+            //计算该点属于哪个bin 9:31-
+            for(;binI<lessFlatBinIdx.size();binI++)
+                for(;binJ<lessFlatBinIdx[binI].size();binJ++)
+                {
+//                    if(i==lessFlatBinIdx[binI][binJ])
+
+                }
+
+            vector<pcl::PointCloud<PointType>::Ptr> corrLessSharpPointsBin;
+            vector<pcl::PointCloud<PointType>::Ptr> corrLessFlatPointsBin;
+            vector<vector<int>> corrLessFlatBinIdx;
+            corrLessFlatBinIdx.resize(N_SCAN * 6);
+
+
+            int ii=0;
+            int idx;
+            for(int jj=0;jj<lessFlatBinIdx.size()&&ii<correspondence_all->size();jj++)
+            {
+                for(int kk=0;kk<lessFlatBinIdx[jj].size()&&ii<correspondence_all->size();kk++)
+                {
+                    idx=correspondence_all->at(ii).index_query;
+                    if(idx==lessFlatBinIdx[jj][kk])
+                    {
+                        ii++;
+                    }
+                }
+            }
+
+
+
+
             Eigen::Matrix4f transform;
             double thresh = 0.1;
 
@@ -2106,7 +2151,7 @@ public:
 
             //获取平面特征点的外点
             ransac_outlierCloudFlat->clear();
-            int idx=0;
+            idx=0;
             int j=0;
             while(j<correspondence_all->size() && idx<inliers.size())
             {
@@ -2161,7 +2206,12 @@ public:
             //            if(inlierNum[jj]!=0)
             //                cout<<"lessFlatBinIdx[jj].size() "<< lessFlatBinIdx[jj].size()<<endl;
             if(lessFlatBinIdx[jj].size()!=0)
-                rate=inlierNum[jj]/lessFlatBinIdx[jj].size();
+            {
+            rate=inlierNum[jj]/lessFlatBinIdx[jj].size();
+            if(rate<0.2)
+                rate=0.2;
+            }
+
             inlierLessFlatRate.push_back(rate);
         }
 
@@ -2882,7 +2932,6 @@ public:
         for (int iterCount1 = 0; iterCount1 < 25; iterCount1++) {
             laserCloudOri->clear();
             coeffSel->clear();
-
             //add by Ma
             if(useRANSAC_==true)
                 //使用less点
@@ -2901,8 +2950,6 @@ public:
 
             laserCloudOri->clear();
             coeffSel->clear();
-
-
             //add by Ma
             if(useRANSAC_==true)
                 //使用less点
