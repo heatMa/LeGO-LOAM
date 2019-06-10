@@ -37,6 +37,8 @@ public:
     /** Data containing a shuffled version of the indices. This is used and modified when drawing samples. */
     std::vector<int> shuffled_indices_;
 
+    std::vector<int> prob_indices_;
+
     std::vector<double> error_sqr_dists_;
     static const unsigned int max_sample_checks_ = 1000;
 
@@ -52,37 +54,37 @@ public:
     /** \brief Boost-based random number generator. */
     boost::shared_ptr<boost::variate_generator< boost::mt19937&, boost::uniform_int<> > > rng_gen_;
 
-//    //构造函数
-//    RansacModel (const PointCloudConstPtr &cloud,
-//                 const std::vector<int> &indices,
-//                 const PointCloudConstPtr &target,
-//                 const std::vector<int> &indices_tgt):
-//        input_ (cloud)
-//      , indices_ (new std::vector<int> (indices))
-//      , target_ (target)
-//      , indices_tgt_ (new std::vector<int> (indices_tgt))
-//      , correspondences_ ()
-//      , shuffled_indices_ ()
-//      , sample_dist_thresh_ (0)
-//    {
-//        computeOriginalIndexMapping ();
-//        computeSampleDistanceThreshold (cloud, indices);
-//        sample_size_ = 3;
-//        model_size_ = 16;
+    //    //构造函数
+    //    RansacModel (const PointCloudConstPtr &cloud,
+    //                 const std::vector<int> &indices,
+    //                 const PointCloudConstPtr &target,
+    //                 const std::vector<int> &indices_tgt):
+    //        input_ (cloud)
+    //      , indices_ (new std::vector<int> (indices))
+    //      , target_ (target)
+    //      , indices_tgt_ (new std::vector<int> (indices_tgt))
+    //      , correspondences_ ()
+    //      , shuffled_indices_ ()
+    //      , sample_dist_thresh_ (0)
+    //    {
+    //        computeOriginalIndexMapping ();
+    //        computeSampleDistanceThreshold (cloud, indices);
+    //        sample_size_ = 3;
+    //        model_size_ = 16;
 
-//        shuffled_indices_ = *indices_;
+    //        shuffled_indices_ = *indices_;
 
-//        rng_alg_.seed (12345u);
-//        rng_dist_.reset(new boost::uniform_int<> (0, std::numeric_limits<int>::max ()));
-//        rng_gen_.reset (new boost::variate_generator<boost::mt19937&, boost::uniform_int<> > (rng_alg_, *rng_dist_));
-//    }
+    //        rng_alg_.seed (12345u);
+    //        rng_dist_.reset(new boost::uniform_int<> (0, std::numeric_limits<int>::max ()));
+    //        rng_gen_.reset (new boost::variate_generator<boost::mt19937&, boost::uniform_int<> > (rng_alg_, *rng_dist_));
+    //    }
 
 
 
     //构造函数
     RansacModel (const std::vector<int> &indices,
                  const std::vector<int> &indices_tgt):
-      indices_ (new std::vector<int> (indices))
+        indices_ (new std::vector<int> (indices))
       , indices_tgt_ (new std::vector<int> (indices_tgt))
       , correspondences_ ()
       , shuffled_indices_ ()
@@ -178,6 +180,53 @@ public:
             //std::swap (shuffled_indices_[i], shuffled_indices_[i + (rand () % (index_size - i))]);
             std::swap (shuffled_indices_[i], shuffled_indices_[i + (rnd () % (index_size - i))]);
         std::copy (shuffled_indices_.begin (), shuffled_indices_.begin () + sample_size, sample.begin ());
+    }
+
+    //按概率采样
+    inline void darwProbSample(const vector<int> &bin, const vector<float> &prob,std::vector<int> &sample)
+    {
+        size_t sample_size = sample.size ();
+
+        //扩充矩阵
+        vector<int> intProb;
+        for(size_t i=0;i<prob.size();i++)
+            intProb.push_back((int)(prob[i]*100));
+        //prob_indices_是扩充后的矩阵
+        prob_indices_.clear();
+        for(int i=0;i<bin.size();i++)
+        {
+            for(size_t j=0;j<intProb[i];j++)
+                prob_indices_.push_back(bin[i]);
+        }
+
+        for (size_t i = 0; i < sample_size; ++i)
+        {
+            size_t index_size = prob_indices_.size ();
+
+            int idx=(rnd () % (index_size));
+            sample.push_back(prob_indices_[idx]);
+
+            //删除已经选择的数据
+            vector<int>::iterator frontIte=prob_indices_.begin()+idx;
+            vector<int>::iterator backIte=prob_indices_.begin()+idx;
+            //这里不能是>=，否则当frontIte为0时，frontIte--会报错
+            while(frontIte>prob_indices_.begin())
+            {
+                if(*frontIte!=prob_indices_[idx])
+                {
+                    frontIte++;
+                    break;
+                }
+                frontIte--;
+            }
+            while(backIte<prob_indices_.end())
+            {
+                if(*backIte!=prob_indices_[idx])
+                    break;
+                backIte++;
+            }
+            prob_indices_.erase(frontIte, backIte);
+        }
     }
 
     bool isSampleGood (const std::vector<int> &samples) const
@@ -464,7 +513,7 @@ public:
     bool computeModel (int debug_verbosity_level = 0);
     //获取内点
     inline void
-          getInliers (std::vector<int> &inliers) const { inliers = inliers_; }
+    getInliers (std::vector<int> &inliers) const { inliers = inliers_; }
 };
 
 
