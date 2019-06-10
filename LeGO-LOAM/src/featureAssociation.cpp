@@ -1579,7 +1579,11 @@ public:
 
 
             //最后要传入ransac的bin，每个bin中只选取第一个点，改点的曲率最大或者最小
-            vector<int> corrLessSharpBinIdx(N_SCAN * 6 , 0);
+            vector<int> corrLessSharpBinIdx(N_SCAN * 6 , -1);
+            vector<vector<int>> tempBinIdx;
+            tempBinIdx.resize(N_SCAN*6);
+
+            //从每个bin中提取出一个已经关联的点
             int ii=0;
             int idx;
             for(int jj=0;jj<lessSharpBinIdx.size()&&ii<correspondence_all->size();jj++)
@@ -1589,13 +1593,25 @@ public:
                     idx=correspondence_all->at(ii).index_query;
                     if(idx==lessSharpBinIdx[jj][kk])
                     {
-                        corrLessSharpBinIdx[jj]=idx;
+                        tempBinIdx[jj].push_back(idx);
                         ii++;
-                        break;
                     }
-                    ii++;
                 }
             }
+            for(int jj=0;jj<tempBinIdx.size();jj++)
+            {
+                if(!tempBinIdx[jj].empty())
+                    corrLessSharpBinIdx.push_back(tempBinIdx[jj][0]);
+            }
+
+
+            for(int i=0;i<corrLessSharpBinIdx.size();i++)
+                std::cout<<"sharp:"<<corrLessSharpBinIdx[i]<<" ";
+            std::cout<<std::endl;
+
+
+
+
 
 
             Eigen::Matrix4f transform;
@@ -2171,10 +2187,10 @@ public:
                     }
                 }
             }
-            for(int jj=0;jj<lessFlatBinIdx.size();jj++)
+            for(int jj=0;jj<tempBinIdx.size();jj++)
             {
-                if(!lessFlatBinIdx[jj].empty())
-                    corrLessFlatBinIdx.push_back(lessFlatBinIdx[jj][0]);
+                if(!tempBinIdx[jj].empty())
+                    corrLessFlatBinIdx.push_back(tempBinIdx[jj][0]);
             }
 
 
