@@ -268,10 +268,10 @@ public:
         lessSharpBinIdx.resize(N_SCAN * 6);
         lessFlatBinIdx.resize(N_SCAN * 6);
 
-        inlierLessSharpRate.resize(N_SCAN * 6);
-        inlierLessFlatRate.resize(N_SCAN * 6);
-        lastInlierLessSharpRate.resize(N_SCAN * 6);
-        lastInlierLessFlatRate.resize(N_SCAN * 6);
+        inlierLessSharpRate.resize(N_SCAN * 6,0.2);
+        inlierLessFlatRate.resize(N_SCAN * 6,0.2);
+        lastInlierLessSharpRate.resize(N_SCAN * 6,0.2);
+        lastInlierLessFlatRate.resize(N_SCAN * 6,0.2);
 
         for(int i=0;i<N_SCAN * 6;i++)
         {
@@ -1586,9 +1586,12 @@ public:
             //从每个bin中提取出一个已经关联的点
             int ii=0;
             int idx;
+            //std::cout<<"LessSharpBinIdx Size: ";
+            //size_t numSize=0;
             for(int jj=0;jj<lessSharpBinIdx.size()&&ii<correspondence_all->size();jj++)
             {
-                //std::cout<<"LessSharpBinIdx:"<<lessSharpBinIdx[jj].size()<<" ";
+                //std::cout<<lessSharpBinIdx[jj].size()<<" ";
+                //numSize+=lessSharpBinIdx[jj].size();
                 for(int kk=0;kk<lessSharpBinIdx[jj].size()&&ii<correspondence_all->size();kk++)
                 {
 
@@ -1600,11 +1603,11 @@ public:
                     }
                 }
             }
-            //std::cout<<std::endl;
-            for(int jj=0;jj<correspondence_all->size();jj++)
-            {
-                std::cout<<correspondence_all->at(jj).index_query<<" ";
-            }
+//            //std::cout<<"Bin总大小： "<<numSize<<" "<<ii<<std::endl;
+//            for(int jj=0;jj<correspondence_all->size();jj++)
+//            {
+//                std::cout<<correspondence_all->at(jj).index_query<<" ";
+//            }
 
             for(int jj=0;jj<tempBinIdx.size();jj++)
             {
@@ -1612,15 +1615,9 @@ public:
                     corrLessSharpBinIdx[jj]=tempBinIdx[jj][0];
             }
 
-
-                        for(int i=0;i<corrLessSharpBinIdx.size();i++)
-                            std::cout<<"sharp:"<<corrLessSharpBinIdx[i]<<" ";
-                        std::cout<<std::endl;
-
-
-
-
-
+//            for(int i=0;i<corrLessSharpBinIdx.size();i++)
+//                std::cout<<"sharp:"<<corrLessSharpBinIdx[i]<<" ";
+//            std::cout<<std::endl;
 
             Eigen::Matrix4f transform;
             double thresh = 0.3;
@@ -1629,7 +1626,6 @@ public:
             inliers.clear();
             //使用pcl::SampleConsensusModelRegistration去除外点
             compute_zheda(inputCloud,laserCloudCornerLast,transform,thresh,correspondence_all,corrLessSharpBinIdx,lastInlierLessSharpRate,inliers);
-
 
             //获取边特征点的外点
             ransac_outlierCloudSharp->clear();
@@ -2604,6 +2600,8 @@ public:
         //自己用从源码重新写的ransac
         RansacModel::Ptr model (new RansacModel(indices_src,indices_tgt));
         model->setInputAndTargerCloud (input,target,indices_src);
+        //设置输入的bin和每个bin的比率
+        model->setBinAndProb(bin,prob);
         ZhedaRansac sac (model, thresh);
 
         if (!sac.computeModel (2))
