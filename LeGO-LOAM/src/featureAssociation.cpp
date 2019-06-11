@@ -1588,8 +1588,10 @@ public:
             int idx;
             for(int jj=0;jj<lessSharpBinIdx.size()&&ii<correspondence_all->size();jj++)
             {
+                //std::cout<<"LessSharpBinIdx:"<<lessSharpBinIdx[jj].size()<<" ";
                 for(int kk=0;kk<lessSharpBinIdx[jj].size()&&ii<correspondence_all->size();kk++)
                 {
+
                     idx=correspondence_all->at(ii).index_query;
                     if(idx==lessSharpBinIdx[jj][kk])
                     {
@@ -1598,16 +1600,22 @@ public:
                     }
                 }
             }
+            //std::cout<<std::endl;
+            for(int jj=0;jj<correspondence_all->size();jj++)
+            {
+                std::cout<<correspondence_all->at(jj).index_query<<" ";
+            }
+
             for(int jj=0;jj<tempBinIdx.size();jj++)
             {
                 if(!tempBinIdx[jj].empty())
-                    corrLessSharpBinIdx.push_back(tempBinIdx[jj][0]);
+                    corrLessSharpBinIdx[jj]=tempBinIdx[jj][0];
             }
 
 
-            for(int i=0;i<corrLessSharpBinIdx.size();i++)
-                std::cout<<"sharp:"<<corrLessSharpBinIdx[i]<<" ";
-            std::cout<<std::endl;
+                        for(int i=0;i<corrLessSharpBinIdx.size();i++)
+                            std::cout<<"sharp:"<<corrLessSharpBinIdx[i]<<" ";
+                        std::cout<<std::endl;
 
 
 
@@ -2147,7 +2155,7 @@ public:
 
 
             //最后要传入ransac的bin，每个bin中只选取第一个点，改点的曲率最大或者最小
-            vector<int> corrLessFlatBinIdx(N_SCAN * 6 , 0);
+            vector<int> corrLessFlatBinIdx(N_SCAN * 6 , -1);
             vector<vector<int>> tempBinIdx;
             tempBinIdx.resize(N_SCAN*6);
             //            //一个点所属的bin
@@ -2190,7 +2198,7 @@ public:
             for(int jj=0;jj<tempBinIdx.size();jj++)
             {
                 if(!tempBinIdx[jj].empty())
-                    corrLessFlatBinIdx.push_back(tempBinIdx[jj][0]);
+                    corrLessFlatBinIdx[jj]=tempBinIdx[jj][0];
             }
 
 
