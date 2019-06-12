@@ -780,7 +780,6 @@ public:
 
     void extractFeatures()
     {
-
         //清空Bin中的数据
         for(int i=0;i<N_SCAN * 6;i++)
         {
@@ -873,6 +872,9 @@ public:
                         cloudLabel[ind] = -1;
                         surfPointsFlat->push_back(segmentedCloud->points[ind]);
 
+                        //这里忘把lessFlat加进来了！！！fuck bug
+                        surfPointsLessFlat->push_back(segmentedCloud->points[ind]);
+
                         //放入当前面点bin中,记录Bin中的点在flat点云中的索引
                         flatPointsBin[i * 6 + j]->push_back(segmentedCloud->points[ind]);
                         flatBinIdx[i * 6 + j].push_back(surfPointsFlat->points.size()-1);
@@ -928,6 +930,26 @@ public:
                 *lessFlatPointsBin[i * 6 + j]+=*surfPointsLessFlatScanDS;
             }
         }
+        //        cout<<"lessSharpPointsBin: "<<cornerPointsLessSharp->points.size()<<endl;
+
+        //        int tempSum=0;
+        //        for(int i=0;i<lessSharpPointsBin.size();i++)
+        //        {
+        //        cout<<lessSharpPointsBin[i]->size()<<" ";
+        //        tempSum+=lessSharpPointsBin[i]->size();
+        //        }
+
+        //        cout<<endl<<"tempSum:"<<tempSum<<endl;
+
+        //        tempSum=0;
+        //        cout<<"lessFlatPointsBin: "<<surfPointsLessFlat->points.size()<<endl;
+        //        for(int i=0;i<lessFlatBinIdx.size();i++)
+        //        {
+        //         cout<<lessFlatBinIdx[i].size()<<" ";
+        //         tempSum+=lessFlatBinIdx[i].size();
+        //        }
+
+        //        cout<<endl<<"tempSum:"<<tempSum<<endl;
     }
 
     void publishCloud()
@@ -1582,7 +1604,6 @@ public:
             vector<int> corrLessSharpBinIdx(N_SCAN * 6 , -1);
             vector<vector<int>> tempBinIdx;
             tempBinIdx.resize(N_SCAN*6);
-
             //从每个bin中提取出一个已经关联的点
             int ii=0;
             int idx;
@@ -1603,21 +1624,12 @@ public:
                     }
                 }
             }
-//            //std::cout<<"Bin总大小： "<<numSize<<" "<<ii<<std::endl;
-//            for(int jj=0;jj<correspondence_all->size();jj++)
-//            {
-//                std::cout<<correspondence_all->at(jj).index_query<<" ";
-//            }
 
             for(int jj=0;jj<tempBinIdx.size();jj++)
             {
                 if(!tempBinIdx[jj].empty())
                     corrLessSharpBinIdx[jj]=tempBinIdx[jj][0];
             }
-
-//            for(int i=0;i<corrLessSharpBinIdx.size();i++)
-//                std::cout<<"sharp:"<<corrLessSharpBinIdx[i]<<" ";
-//            std::cout<<std::endl;
 
             Eigen::Matrix4f transform;
             double thresh = 0.3;
@@ -1626,7 +1638,7 @@ public:
             inliers.clear();
             //使用pcl::SampleConsensusModelRegistration去除外点
             compute_zheda(inputCloud,laserCloudCornerLast,transform,thresh,correspondence_all,corrLessSharpBinIdx,lastInlierLessSharpRate,inliers);
-
+            //cout<<"ddddddddddddd"<<endl;
             //获取边特征点的外点
             ransac_outlierCloudSharp->clear();
             idx=0;
@@ -1656,7 +1668,6 @@ public:
             std::cout<<" 边特征点: "<<iterCount<<"  "<< (double)(clock()-start)/CLOCKS_PER_SEC<<"  "<<correspondence_all->size()<<"  "<<inliers.size()<<"  "<<ransac_outlierCloudSharp->size()<<std::endl;
         }
 
-
         //统计各个bin中内点数量,放入到inlierNum中
         map<int,int> inlierNum;
         for(int i=0;i<N_SCAN * 6;i++)
@@ -1676,17 +1687,23 @@ public:
                 }
             }
         }
+
+//        cout<<"inlierNum:";
+//        for(int i=0;i<N_SCAN * 6;i++)
+//            cout<<inlierNum[i]<<"/"<<lessSharpBinIdx[i].size()<<"  ";
+//        cout<<endl;
+
         //存储内点比率
         inlierLessSharpRate.clear();
         for(int jj=0;jj<lessSharpBinIdx.size();jj++)
         {
-            float rate=0;
+            float rate=0.2;
             //            if(inlierNum[jj]!=0)
             //                cout<<"lessSharpBinIdx[jj].size() "<< lessSharpBinIdx[jj].size()<<endl;
             if(lessSharpBinIdx[jj].size()!=0)
-                rate=inlierNum[jj]/lessSharpBinIdx[jj].size();
-            if(rate<0.2)
-                rate=0.2;
+            {
+                rate=inlierNum[jj] * 0.8/lessSharpBinIdx[jj].size() + 0.2;
+            }
             inlierLessSharpRate.push_back(rate);
         }
 
@@ -2154,27 +2171,7 @@ public:
             vector<int> corrLessFlatBinIdx(N_SCAN * 6 , -1);
             vector<vector<int>> tempBinIdx;
             tempBinIdx.resize(N_SCAN*6);
-            //            //一个点所属的bin
-            //            int binI=0,binJ=0;
-            //            int ii=0;
-            //            int idx;
-            //            //计算该点属于哪个bin 9:31-
-            //            while(binI<lessFlatBinIdx.size()&&ii<correspondence_all->size())
-            //            {
-            //                while(binJ<lessFlatBinIdx[binI].size()&&ii<correspondence_all->size())
-            //                {
-            //                    idx=correspondence_all->at(ii).index_query;
-            //                    if(idx==lessFlatBinIdx[binI][binJ])
-            //                    {
-            //                        corrLessFlatBinIdx[binI]=idx;
-            //                        binI++;
-            //                        binJ=0;
-            //                        ii++;
-            //                        break;
-            //                    }
-            //                    ii++;
-            //                }
-            //            }
+
 
             //从每个bin中提取出一个已经关联的点
             int ii=0;
@@ -2198,9 +2195,9 @@ public:
             }
 
 
-            for(int i=0;i<corrLessFlatBinIdx.size();i++)
-                std::cout<<"flat:"<<corrLessFlatBinIdx[i]<<" ";
-            std::cout<<std::endl;
+            //            for(int i=0;i<corrLessFlatBinIdx.size();i++)
+            //                std::cout<<"flat:"<<corrLessFlatBinIdx[i]<<" ";
+            //            std::cout<<std::endl;
 
             Eigen::Matrix4f transform;
             double thresh = 0.1;
@@ -2238,6 +2235,8 @@ public:
         }
 
 
+        //        std::cout<<" 00000: "<<endl;
+
         //统计各个bin中内点数量
         map<int,int> inlierNum;
         for(int i=0;i<N_SCAN * 6;i++)
@@ -2261,19 +2260,16 @@ public:
         inlierLessFlatRate.clear();
         for(int jj=0;jj<lessFlatBinIdx.size();jj++)
         {
-            float rate=0;
+            float rate=0.2;
             //            if(inlierNum[jj]!=0)
             //                cout<<"lessFlatBinIdx[jj].size() "<< lessFlatBinIdx[jj].size()<<endl;
             if(lessFlatBinIdx[jj].size()!=0)
             {
-                rate=inlierNum[jj]/lessFlatBinIdx[jj].size();
-                if(rate<0.2)
-                    rate=0.2;
+                rate=inlierNum[jj] * 0.8 / lessFlatBinIdx[jj].size() + 0.2;
             }
 
             inlierLessFlatRate.push_back(rate);
         }
-
         //pointSearchSurfInd2肯定是>=0的，因为它是搜到的最近点
         for(int j=0;j<inliers.size();j++)
         {
@@ -2323,7 +2319,6 @@ public:
                 }
             }
         }
-
     }
 
 
@@ -3039,6 +3034,7 @@ public:
                 continue;
             if (calculateTransformationSurf(iterCount1) == false)
                 break;
+
         }
 
         for (int iterCount2 = 0; iterCount2 < 25; iterCount2++) {
@@ -3051,7 +3047,6 @@ public:
                 findCorrespondingCornerFeatures_zhedaRANSAC(iterCount2,cornerPointsLessSharp);
             else
                 findCorrespondingCornerFeatures(iterCount2);
-
             if (laserCloudOri->points.size() < 10)
                 continue;
             if (calculateTransformationCorner(iterCount2) == false)

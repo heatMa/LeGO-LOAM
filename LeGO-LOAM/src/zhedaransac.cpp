@@ -38,6 +38,9 @@ public:
     std::vector<int> shuffled_indices_;
 
     std::vector<int> prob_indices_;
+    vector<int> bin_;
+    vector<float> prob_;
+
 
     std::vector<double> error_sqr_dists_;
     static const unsigned int max_sample_checks_ = 1000;
@@ -169,7 +172,7 @@ public:
         return ((*rng_gen_) ());
     }
 
-    //提取样本
+    //pcl源码原始的提取样本函数
     inline void drawIndexSample (std::vector<int> &sample)
     {
         size_t sample_size = sample.size ();
@@ -182,38 +185,57 @@ public:
         std::copy (shuffled_indices_.begin (), shuffled_indices_.begin () + sample_size, sample.begin ());
     }
 
-    //按概率采样,bin和src_indices_要分开，bin只是用来选择最小样本的，而src_indices_是用来找到最好的模型划分内外点的
-    inline void darwProbSample(const vector<int> &bin, const vector<float> &prob,std::vector<int> &sample)
+    void setBinAndProb(const vector<int> &bin, const vector<float> &prob)
     {
-        size_t sample_size = sample.size ();
+        bin_=bin;
+        prob_=prob;
+    }
+
+    //按概率采样,bin和src_indices_要分开，bin只是用来选择最小样本的，而src_indices_是用来找到最好的模型划分内外点的
+    inline void drawProbSample(std::vector<int> &sample)
+    {
 
         //扩充矩阵
         //首先计算加权后的概率
         float probSum=0;
-        for(int i=0;i<prob.size();i++)
-            probSum+=prob[i];
-        //根据概率扩充矩阵
-        vector<int> intProb;
-        for(size_t i=0;i<prob.size();i++)
-            intProb.push_back((int)(prob[i] * 1000 / probSum ));
-        //prob_indices_是扩充后的矩阵
-        prob_indices_.clear();
-        for(int i=0;i<bin.size();i++)
+        for(int i=0;i<prob_.size();i++)
         {
-            for(size_t j=0;j<intProb[i];j++)
-                prob_indices_.push_back(bin[i]);
+            probSum+=prob_[i];
+            //cout<<prob_[i]<<" ";
         }
 
-        for (size_t i = 0; i < sample_size; ++i)
+        //cout<<endl<<"probSum: "<<probSum<<endl;
+        //根据概率计算扩展矩阵后每个bin出现的次数
+        vector<int> intProb;
+        for(size_t i=0;i<prob_.size();i++)
+        {
+            if(bin_[i]==-1)
+                intProb.push_back(0);
+            else
+                intProb.push_back((int)(prob_[i] * 100 / probSum ));
+        }
+
+        //prob_indices_是扩充后的矩阵
+        prob_indices_.clear();
+        for(int i=0;i<bin_.size();i++)
+        {
+            for(size_t j=0;j<intProb[i];j++)
+                prob_indices_.push_back(bin_[i]);
+        }
+
+        //fuck bug
+        for (size_t i = 0; i < sample_size_; ++i)
         {
             size_t index_size = prob_indices_.size ();
 
             int idx=(rnd () % (index_size));
-            sample.push_back(prob_indices_[idx]);
+
+            sample[i]=prob_indices_[idx];
 
             //删除已经选择的数据
             vector<int>::iterator frontIte=prob_indices_.begin()+idx;
             vector<int>::iterator backIte=prob_indices_.begin()+idx;
+            //cout<<"111"<<endl;
             //这里不能是>=，否则当frontIte为0时，frontIte--会报错
             while(frontIte>prob_indices_.begin())
             {
@@ -232,6 +254,7 @@ public:
             }
             prob_indices_.erase(frontIte, backIte);
         }
+        //cout<<"prob_indices.size: "<<prob_indices_.size()<<endl;
     }
 
     bool isSampleGood (const std::vector<int> &samples) const
@@ -261,21 +284,25 @@ public:
             iterations = INT_MAX - 1;
             return;
         }
-
         // Get a second point which is different than the first
         samples.resize (getSampleSize ());
         for (unsigned int iter = 0; iter < max_sample_checks_; ++iter)
         {
             // Choose the random indices
-            drawIndexSample (samples);
-
+            //drawIndexSample (samples);
+            drawProbSample(samples);
             // If it's a good sample, stop here
             if (isSampleGood (samples))
             {
                 PCL_DEBUG ("[pcl::SampleConsensusModel::getSamples] Selected %lu samples.\n", samples.size ());
+//                cout<<"samples: ";
+//                for(int i=0;i<samples.size();i++)
+//                    cout<<samples[i]<<" ";
+//                cout<< endl;
                 return;
             }
         }
+        cout<<55555555555<<endl;
         PCL_DEBUG ("[pcl::SampleConsensusModel::getSamples] WARNING: Could not select %d sample points in %d iterations!\n", getSampleSize (), max_sample_checks_);
         samples.clear ();
     }
@@ -600,6 +627,11 @@ bool ZhedaRansac::computeModel (int)
     }
 
     PCL_DEBUG ("[pcl::RandomSampleConsensus::computeModel] Model: %lu size, %d inliers.\n", model_.size (), n_best_inliers_count);
+
+//    cout<<"最终采样 samples: ";
+//    for(int i=0;i<model_.size();i++)
+//        cout<<model_[i]<<" ";
+//    cout<< endl;
 
     if (model_.empty ())
     {
