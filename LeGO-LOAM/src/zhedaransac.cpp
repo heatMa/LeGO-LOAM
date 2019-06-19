@@ -201,10 +201,7 @@ public:
         for(int i=0;i<prob_.size();i++)
         {
             probSum+=prob_[i];
-            //cout<<prob_[i]<<" ";
         }
-
-        //cout<<endl<<"probSum: "<<probSum<<endl;
         //根据概率计算扩展矩阵后每个bin出现的次数
         vector<int> intProb;
         for(size_t i=0;i<prob_.size();i++)
@@ -222,20 +219,24 @@ public:
             for(size_t j=0;j<intProb[i];j++)
                 prob_indices_.push_back(bin_[i]);
         }
-
         //fuck bug
         for (size_t i = 0; i < sample_size_; ++i)
         {
             size_t index_size = prob_indices_.size ();
 
+            //fix bug　凡是除法都要加一个判断分母是否为０！！！出现这种情况是因为bin_[i]中全是－１
+            //此时就不管bin了，直接在原始的对应关系中提取点
+            if(index_size==0)
+            {
+                for(auto it=correspondences_.begin();it!=correspondences_.end();it++)
+                    prob_indices_.push_back(it->first);
+                index_size=prob_indices_.size();
+            }
             int idx=(rnd () % (index_size));
-
             sample[i]=prob_indices_[idx];
-
             //删除已经选择的数据
             vector<int>::iterator frontIte=prob_indices_.begin()+idx;
             vector<int>::iterator backIte=prob_indices_.begin()+idx;
-            //cout<<"111"<<endl;
             //这里不能是>=，否则当frontIte为0时，frontIte--会报错
             while(frontIte>prob_indices_.begin())
             {
@@ -291,6 +292,12 @@ public:
             // Choose the random indices
             //drawIndexSample (samples);
             drawProbSample(samples);
+            //有可能采样失败
+            if(samples.size()==0)
+            {
+                PCL_WARN("采样失败了！！！");
+                return;
+            }
             // If it's a good sample, stop here
             if (isSampleGood (samples))
             {
@@ -574,7 +581,6 @@ bool ZhedaRansac::computeModel (int)
     unsigned skipped_count = 0;
     // suppress infinite loops by just allowing 10 x maximum allowed iterations for invalid model parameters!
     const unsigned max_skip = max_iterations_ * 10;
-
     // Iterate
     while (iterations_ < k && skipped_count < max_skip)
     {
@@ -593,7 +599,6 @@ bool ZhedaRansac::computeModel (int)
             ++skipped_count;
             continue;
         }
-
         // Select the inliers that are within threshold_ from the model
         //sac_model_->selectWithinDistance (model_coefficients, threshold_, inliers);
         //if (inliers.empty () && k > 1.0)

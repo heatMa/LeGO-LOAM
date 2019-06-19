@@ -823,7 +823,8 @@ public:
                             segInfo.segmentedCloudGroundFlag[ind] == false) {
 
                         largestPickedNum++;
-                        if (largestPickedNum <= 2) {
+                        //ｓharp点个数
+                        if (largestPickedNum <= 8) {
                             cloudLabel[ind] = 2;
                             cornerPointsSharp->push_back(segmentedCloud->points[ind]);
                             cornerPointsLessSharp->push_back(segmentedCloud->points[ind]);
@@ -833,14 +834,14 @@ public:
                             sharpBinIdx[i * 6 + j].push_back(cornerPointsSharp->points.size()-1);
                             //放入less点bin中
                             lessSharpPointsBin[i * 6 + j]->push_back((segmentedCloud->points[ind]));
-                            lessSharpBinIdx[i * 6 + j].push_back(cornerPointsLessSharp->points.size()-1);
+                            lessSharpBinIdx[i * 6 + j].push_back(cornerPointsSharp->points.size()-1);
 
                         } else if (largestPickedNum <= 20) {
                             cloudLabel[ind] = 1;
                             cornerPointsLessSharp->push_back(segmentedCloud->points[ind]);
                             //放入less点bin中
-                            lessSharpPointsBin[i * 6 + j ]->push_back((segmentedCloud->points[ind]));
-                            lessSharpBinIdx[i * 6 + j].push_back(cornerPointsLessSharp->points.size()-1);
+                            //lessSharpPointsBin[i * 6 + j ]->push_back((segmentedCloud->points[ind]));
+                            //lessSharpBinIdx[i * 6 + j].push_back(cornerPointsLessSharp->points.size()-1);
                         } else {
                             break;
                         }
@@ -880,10 +881,11 @@ public:
                         flatBinIdx[i * 6 + j].push_back(surfPointsFlat->points.size()-1);
                         //放入less点bin中
                         lessFlatPointsBin[i * 6 + j]->push_back(segmentedCloud->points[ind]);
-                        lessFlatBinIdx[i * 6 + j].push_back(surfPointsLessFlat->points.size()-1);
+                        lessFlatBinIdx[i * 6 + j].push_back(surfPointsFlat->points.size()-1);
 
                         smallestPickedNum++;
-                        if (smallestPickedNum >= 4) {
+                        //flat点个数
+                        if (smallestPickedNum >= 32) {
                             break;
                         }
 
@@ -921,13 +923,13 @@ public:
                 downSizeFilter.setInputCloud(surfPointsLessFlatScan);
                 downSizeFilter.filter(*surfPointsLessFlatScanDS);
 
-                //存储平面点在特征点云中的索引到binIdx中
-                for(int k=0;k<surfPointsLessFlatScanDS->size();k++)
-                    lessFlatBinIdx[i * 6 + j].push_back(surfPointsLessFlat->size() + k);
+//                //存储平面点在特征点云中的索引到binIdx中
+//                for(int k=0;k<surfPointsLessFlatScanDS->size();k++)
+//                    lessFlatBinIdx[i * 6 + j].push_back(surfPointsLessFlat->size() + k);
 
                 *surfPointsLessFlat += *surfPointsLessFlatScanDS;
 
-                *lessFlatPointsBin[i * 6 + j]+=*surfPointsLessFlatScanDS;
+//                *lessFlatPointsBin[i * 6 + j]+=*surfPointsLessFlatScanDS;
             }
         }
         //        cout<<"lessSharpPointsBin: "<<cornerPointsLessSharp->points.size()<<endl;
@@ -950,6 +952,7 @@ public:
         //        }
 
         //        cout<<endl<<"tempSum:"<<tempSum<<endl;
+        cout<<" sharp和flat点数：  "<<"边 "<<cornerPointsSharp->points.size()<<"　　面 "<<surfPointsFlat->points.size()<<endl;
     }
 
     void publishCloud()
@@ -2165,8 +2168,6 @@ public:
 
             *correspondence_all = correspondences;
 
-
-
             //最后要传入ransac的bin，每个bin中只选取第一个点，改点的曲率最大或者最小
             vector<int> corrLessFlatBinIdx(N_SCAN * 6 , -1);
             vector<vector<int>> tempBinIdx;
@@ -2233,8 +2234,6 @@ public:
             }
             std::cout<<"     面特征点: "<<iterCount<<" "<< (double)(clock()-start)/CLOCKS_PER_SEC<<"  "<<correspondence_all->size()<<"  "<<inliers.size()<<"  "<<ransac_outlierCloudFlat->size()<<std::endl;
         }
-
-
         //        std::cout<<" 00000: "<<endl;
 
         //统计各个bin中内点数量
@@ -2585,7 +2584,6 @@ public:
             indices_src.push_back(jj);
             indices_tgt.push_back(kk);
         }
-
         //        //pcl库中的ransac
         //        pcl::SampleConsensusModelRegistration<PointType>::Ptr model (new pcl::SampleConsensusModelRegistration<PointType> (input,indices_src));
         //        model->setInputTarget (target,indices_tgt);
@@ -2598,17 +2596,14 @@ public:
         //设置输入的bin和每个bin的比率
         model->setBinAndProb(bin,prob);
         ZhedaRansac sac (model, thresh);
-
         if (!sac.computeModel (2))
         {
             PCL_ERROR ("Could not compute a valid transformation!\n");
             return;
         }
-
         //获取内点
         sac.getInliers(inliers);
         //        std::cout<<"inliers size "<<inliers.size()<<std::endl;
-
         //        //获取变换矩阵  这里的问题！！！自己把sac.getModelCoefficients(coeff)注释了，所以下面没有数据，导致程序中断
         //        Eigen::VectorXf coeff;
         //        sac.getModelCoefficients (coeff);
@@ -3015,28 +3010,23 @@ public:
     }
 
     void updateTransformation(){
-
         if (laserCloudCornerLastNum < 10 || laserCloudSurfLastNum < 100)
             return;
-
         for (int iterCount1 = 0; iterCount1 < 25; iterCount1++) {
             laserCloudOri->clear();
             coeffSel->clear();
             //add by Ma
             if(useRANSAC_==true)
                 //使用less点
-                findCorrespondingSurfFeatures_zhedaRANSAC(iterCount1,surfPointsLessFlat);
+                findCorrespondingSurfFeatures_zhedaRANSAC(iterCount1,surfPointsFlat);
             else
                 findCorrespondingSurfFeatures(iterCount1);
-
             //注意这里，点数小于10的话就不计算了，所以RANSAC后点数也不能太少
             if (laserCloudOri->points.size() < 10)
                 continue;
             if (calculateTransformationSurf(iterCount1) == false)
                 break;
-
         }
-
         for (int iterCount2 = 0; iterCount2 < 25; iterCount2++) {
 
             laserCloudOri->clear();
@@ -3044,7 +3034,7 @@ public:
             //add by Ma
             if(useRANSAC_==true)
                 //使用less点
-                findCorrespondingCornerFeatures_zhedaRANSAC(iterCount2,cornerPointsLessSharp);
+                findCorrespondingCornerFeatures_zhedaRANSAC(iterCount2,cornerPointsSharp);
             else
                 findCorrespondingCornerFeatures(iterCount2);
             if (laserCloudOri->points.size() < 10)
@@ -3222,7 +3212,7 @@ public:
         calculateSmoothness();
 
         markOccludedPoints();
-
+//cout<<"111"<<endl;
         extractFeatures();
         publishCloud();
 
@@ -3232,10 +3222,10 @@ public:
         }
 
         updateInitialGuess();
-
+//cout<<"222"<<endl;
         updateTransformation();
         //updateTransformation_sac_model_registration();
-
+//cout<<"333"<<endl;
         integrateTransformation();
 
         publishOdometry();
