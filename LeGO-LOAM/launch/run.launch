@@ -32,7 +32,7 @@
 
 <node pkg="rosbag" type="play" name="play" output="screen" args="/media/localization/DATA/2018-09-27-garage.bag --topic /velodyne_points"/>
 
-<node pkg="loam_velodyne" type="getOdometry" name="getOdometry" output="screen">
+<node pkg="lego_loam" type="getOdometry" name="getOdometry" output="screen">
 </node>
 <!--
 <node pkg="lego_loam" type="pointPublish" name="pointPublish" />
