@@ -30,7 +30,7 @@
 <param name="ransacThreshold_" type="int"  value="10"/>
 
 
-<node pkg="rosbag" type="play" name="play" output="screen" args="/media/localization/DATA/2019-04-04-16-18-25.bag --topic /velodyne_points"/>
+<node pkg="rosbag" type="play" name="play" output="screen" args="/media/localization/DATA/2018-09-27-garage.bag --topic /velodyne_points"/>
 
 <node pkg="loam_velodyne" type="getOdometry" name="getOdometry" output="screen">
 </node>
